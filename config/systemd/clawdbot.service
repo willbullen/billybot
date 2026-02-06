@@ -1,0 +1,59 @@
+[Unit]
+Description=BillyBot AI Assistant Service
+Documentation=https://github.com/willbullen/billybot
+After=network.target network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=william
+Group=william
+WorkingDirectory=/home/william/clawd
+ExecStart=/usr/bin/clawdbot gateway start
+ExecReload=/bin/kill -HUP $MAINPID
+KillMode=mixed
+TimeoutStopSec=30
+
+# Environment
+Environment=HOME=/home/william
+Environment=USER=william
+Environment=PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+Environment=NODE_ENV=production
+
+# Jetson-specific optimizations
+Environment=JETSON_ORIN_NX=true
+Environment=JETSON_MEMORY_LIMIT=6G
+Environment=JETSON_GPU_ENABLED=true
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=billybot
+
+# Restart policy
+Restart=always
+RestartSec=10
+StartLimitInterval=60
+StartLimitBurst=3
+
+# Security
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=/home/william/clawd /tmp /var/tmp
+
+# Resource limits (Jetson-optimized)
+# Memory limit (leave some for system)
+MemoryMax=6G
+MemoryHigh=5G
+
+# CPU limit (allow burst, but limit sustained usage)
+CPUQuota=80%
+
+# Jetson thermal management
+# Will restart if temperature gets too high
+ExecStartPre=/bin/bash -c 'if [ $(cat /sys/class/thermal/thermal_zone0/temp 2>/dev/null || echo 0) -gt 85000 ]; then echo "Temperature too high, waiting..."; sleep 60; fi'
+
+[Install]
+WantedBy=multi-user.target
