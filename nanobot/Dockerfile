@@ -12,6 +12,11 @@ RUN apt-get update && \
     apt-get autoremove -y && \
     rm -rf /var/lib/apt/lists/*
 
+# Install Docker CLI (static binary, for docker exec into ROS 2 container)
+RUN ARCH="$(uname -m)" && \
+    curl -fsSL "https://download.docker.com/linux/static/stable/${ARCH}/docker-27.5.1.tgz" | \
+    tar xz --strip-components=1 -C /usr/local/bin docker/docker
+
 WORKDIR /app
 
 # Install Python dependencies first (cached layer)

@@ -18,7 +18,7 @@ from launch.actions import DeclareLaunchArgument, ExecuteProcess, LogInfo, Group
 from launch.conditions import IfCondition
 from launch.substitutions import LaunchConfiguration, EnvironmentVariable, PythonExpression
 from launch_ros.actions import Node, PushRosNamespace
-from ament_index_python.packages import get_package_share_directory
+from ament_index_python.packages import get_package_share_directory, get_package_prefix
 
 
 def generate_launch_description():
@@ -87,14 +87,14 @@ def generate_launch_description():
     
     # Audio capture node
     audio_capturer = Node(
-        package='audio_common',
-        executable='audio_capturer_node',
-        name='audio_capturer_node',
+        package='audio_capture',
+        executable='audio_capture_node',
+        name='audio_capture_node',
         output='screen',
         parameters=[{
             'chunk': 512,  # 32ms @ 16kHz - standard chunk size
             'rate': 16000,
-            'device': -1  # Use default device
+            'device': 'default'  # audio_capture expects string (e.g. "default" or device name)
         }]
     )
     
@@ -108,7 +108,7 @@ def generate_launch_description():
             'topic': 'response_voice',  # Relative topic for namespacing
             'sample_rate': 16000,  # Standardized from 24kHz
             'channels': 1,
-            'device': -1    # Default output device
+            'device': -1  # Default output device (by_your_command node uses int)
         }]
     )
     
@@ -155,9 +155,11 @@ def generate_launch_description():
     )
     
     # OpenAI Realtime Agent (standalone process)
+    pkg_prefix = get_package_prefix('by_your_command')
+    oai_agent_exe = os.path.join(pkg_prefix, 'lib', 'by_your_command', 'oai_realtime_agent')
     openai_agent = ExecuteProcess(
         cmd=[
-            '/home/karim/ros2_ws/install/by_your_command/lib/by_your_command/oai_realtime_agent',
+            oai_agent_exe,
             '--config', agent_config,
             '--pause-timeout', LaunchConfiguration('pause_timeout')
         ],

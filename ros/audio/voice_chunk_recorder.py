@@ -3,7 +3,7 @@ import rclpy
 from rclpy.node import Node
 from std_msgs.msg import Bool
 from by_your_command.msg import AudioDataUtterance
-from audio_common_msgs.msg import AudioData, AudioStamped
+from audio_common_msgs.msg import AudioData, AudioDataStamped
 import wave
 from array import array
 from rclpy.qos import QoSProfile, QoSReliabilityPolicy, QoSHistoryPolicy
@@ -64,7 +64,7 @@ class VoiceChunkRecorder(Node):
         elif self.input_mode == 'audio_stamped':
             self.get_logger().info(f"Starting in audio_stamped mode, subscribing to {self.input_topic}")
             self.get_logger().info(f"Input sample rate: {self.input_sample_rate} Hz, timeout: {self.audio_timeout} seconds")
-            self.create_subscription(AudioStamped, self.input_topic, self.audio_stamped_callback, qos_profile=qos)
+            self.create_subscription(AudioDataStamped, self.input_topic, self.audio_stamped_callback, qos_profile=qos)
         else:
             self.get_logger().info("Starting in utterance mode")
             # Subscribe to enhanced chunks with utterance metadata
@@ -178,18 +178,18 @@ class VoiceChunkRecorder(Node):
         """Handle continuous audio data from /audio_out"""
         current_time = time.time()
         
-        # Check which field has data
+        # Check which field has data (ros2 audio_common_msgs has .data uint8[] only)
         audio_bytes = None
-        if msg.int16_data:
-            # Convert int16 array to bytes
+        if getattr(msg, 'data', None):
+            audio_bytes = bytes(msg.data)
+        elif getattr(msg, 'int16_data', None):
             try:
                 audio_array = array('h', msg.int16_data)
                 audio_bytes = audio_array.tobytes()
             except Exception as e:
                 self.get_logger().error(f'Failed to convert int16_data to bytes: {e}')
                 return
-        elif msg.uint8_data:
-            # Already in byte format
+        elif getattr(msg, 'uint8_data', None):
             audio_bytes = bytes(msg.uint8_data)
         else:
             self.get_logger().warning('No audio data found in message')
@@ -254,11 +254,9 @@ class VoiceChunkRecorder(Node):
         self.audio_data_start_time = None
         self.chunks_received = 0
     
-    def audio_stamped_callback(self, msg: AudioStamped):
-        """Handle continuous AudioStamped data (wraps AudioData)"""
-        # AudioStamped contains header + audio, which contains audio_data + info
-        # Forward the audio_data part to the audio_data_callback
-        self.audio_data_callback(msg.audio.audio_data)
+    def audio_stamped_callback(self, msg: AudioDataStamped):
+        """Handle continuous AudioDataStamped (ros2: header + audio as AudioData)."""
+        self.audio_data_callback(msg.audio)
 
 
 def main(args=None):

@@ -11,9 +11,8 @@ Author: Karim Virani
 import rclpy
 from rclpy.node import Node
 from rclpy.qos import QoSProfile, QoSReliabilityPolicy, QoSHistoryPolicy
-from audio_common_msgs.msg import AudioData, AudioStamped, Audio, AudioInfo
+from audio_common_msgs.msg import AudioData, AudioDataStamped
 from std_msgs.msg import Header
-from builtin_interfaces.msg import Time
 
 
 class AudioDataToStampedNode(Node):
@@ -50,13 +49,13 @@ class AudioDataToStampedNode(Node):
         )
         
         self.publisher = self.create_publisher(
-            AudioStamped,
+            AudioDataStamped,
             self.output_topic,
             qos
         )
         
         self.get_logger().info(
-            f"Converting AudioData from {self.input_topic} to AudioStamped on {self.output_topic}"
+            f"Converting AudioData from {self.input_topic} to AudioDataStamped on {self.output_topic}"
         )
         self.get_logger().info(
             f"Audio format: {self.sample_rate}Hz, {self.channels} channel(s), format {self.format}"
@@ -65,37 +64,15 @@ class AudioDataToStampedNode(Node):
         self.msg_count = 0
         
     def audio_callback(self, msg: AudioData):
-        """Convert AudioData to AudioStamped"""
-        # Create AudioStamped message
-        stamped_msg = AudioStamped()
-        
-        # Set header with current timestamp
+        """Convert AudioData to AudioDataStamped (ros2 audio_common_msgs: header + audio)."""
+        if not msg.data:
+            self.get_logger().warning("No audio data found in message")
+            return
+        stamped_msg = AudioDataStamped()
         stamped_msg.header = Header()
         stamped_msg.header.stamp = self.get_clock().now().to_msg()
         stamped_msg.header.frame_id = "audio"
-        
-        # Create Audio message
-        stamped_msg.audio = Audio()
-        
-        # Set AudioInfo
-        stamped_msg.audio.info = AudioInfo()
-        stamped_msg.audio.info.format = self.format
-        stamped_msg.audio.info.channels = self.channels
-        stamped_msg.audio.info.rate = self.sample_rate
-        
-        # Determine chunk size from data
-        if msg.int16_data:
-            stamped_msg.audio.info.chunk = len(msg.int16_data)
-        elif msg.uint8_data:
-            stamped_msg.audio.info.chunk = len(msg.uint8_data) // 2  # 2 bytes per sample
-        else:
-            self.get_logger().warning("No audio data found in message")
-            return
-        
-        # Copy audio data
-        stamped_msg.audio.audio_data = msg
-        
-        # Publish
+        stamped_msg.audio = msg
         self.publisher.publish(stamped_msg)
         self.msg_count += 1
         

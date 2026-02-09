@@ -3,7 +3,7 @@ import rclpy
 from rclpy.node import Node
 from std_msgs.msg import Bool, String
 from rclpy.qos import QoSProfile, QoSReliabilityPolicy, QoSHistoryPolicy
-from audio_common_msgs.msg import AudioStamped, AudioData
+from audio_common_msgs.msg import AudioDataStamped, AudioData
 from by_your_command.msg import AudioDataUtterance
 
 import numpy as np
@@ -59,7 +59,7 @@ class SileroVADNode(Node):
             depth=10,
             reliability=QoSReliabilityPolicy.BEST_EFFORT
         )
-        self.create_subscription(AudioStamped, 'audio', self.audio_callback, qos_profile=qos)
+        self.create_subscription(AudioDataStamped, 'audio', self.audio_callback, qos_profile=qos)
         self.voice_pub = self.create_publisher(Bool, 'voice_activity', qos_profile=qos)
         # Publish to new topic name (was voice_chunks)
         self.chunk_pub = self.create_publisher(AudioDataUtterance, 'prompt_voice', qos_profile=qos)
@@ -154,7 +154,7 @@ class SileroVADNode(Node):
             # Log other text input but don't act on it
             self.log_debug(f"📝 Text input received (no sleep/wake command): '{msg.data}'")
 
-    def audio_callback(self, msg: AudioStamped):
+    def audio_callback(self, msg: AudioDataStamped):
         # Debug: Track audio callback frequency
         if not hasattr(self, '_audio_callback_count'):
             self._audio_callback_count = 0
@@ -163,8 +163,8 @@ class SileroVADNode(Node):
         if self._audio_callback_count % 100 == 0:  # Every 100 callbacks
             print(f"[AUDIO DEBUG] Received {self._audio_callback_count} audio callbacks, is_awake={self.is_awake}")
         
-        # Convert incoming AudioStamped to numpy int16
-        audio_list = msg.audio.audio_data.int16_data
+        # Convert incoming AudioDataStamped to numpy int16 (ros2: msg.audio is AudioData with .data uint8[])
+        audio_list = np.frombuffer(msg.audio.data, dtype=np.int16).tolist() if msg.audio.data else []
         
         # Skip empty chunks
         if len(audio_list) == 0:
@@ -336,9 +336,12 @@ class SileroVADNode(Node):
         self.log_info(
             f'Publishing chunk {self.chunk_count}: frames {start_idx}-{total}, duration {duration:.2f}s'
         )
-        # Publish
-        chunk_msg = AudioData()
+        # Publish (chunk_pub expects AudioDataUtterance)
+        chunk_msg = AudioDataUtterance()
         chunk_msg.int16_data = np.frombuffer(audio_data, dtype=np.int16).tolist()
+        chunk_msg.utterance_id = self.current_utterance_id or 0
+        chunk_msg.is_utterance_end = False
+        chunk_msg.chunk_sequence = self.chunk_count
         self.chunk_pub.publish(chunk_msg)
         # Update counters
         self.last_chunk_buffer_idx = total

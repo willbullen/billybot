@@ -97,14 +97,14 @@ def generate_launch_description():
     
     # Audio capture node
     audio_capturer = Node(
-        package='audio_common',
-        executable='audio_capturer_node',
-        name='audio_capturer_node',
+        package='audio_capture',
+        executable='audio_capture_node',
+        name='audio_capture_node',
         output='screen',
         parameters=[{
             'chunk': 512,  # 32ms @ 16kHz
             'rate': 16000,
-            'device': -1
+            'device': 'default'  # audio_capture expects string
         }]
     )
     
@@ -118,7 +118,7 @@ def generate_launch_description():
             'topic': 'response_voice',
             'sample_rate': 24000,  # Gemini output rate
             'channels': 1,
-            'device': -1
+            'device': -1  # Default output device (simple_audio_player uses int)
         }]
     )
     

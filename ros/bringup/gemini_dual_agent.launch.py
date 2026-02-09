@@ -101,14 +101,14 @@ def generate_launch_description():
     
     # Audio capture node
     audio_capturer = Node(
-        package='audio_common',
-        executable='audio_capturer_node',
-        name='audio_capturer_node',
+        package='audio_capture',
+        executable='audio_capture_node',
+        name='audio_capture_node',
         output='screen',
         parameters=[{
             'chunk': 512,  # 32ms @ 16kHz - standard chunk size
             'rate': 16000,
-            'device': -1  # Use default device
+            'device': 'default'  # audio_capture expects string
         }]
     )
     
@@ -122,7 +122,7 @@ def generate_launch_description():
             'topic': 'response_voice',  # Relative topic for namespacing
             'sample_rate': 24000,  # Gemini outputs at 24kHz
             'channels': 1,
-            'device': -1    # Default output device
+            'device': -1    # Default output device (by_your_command node)
         }]
     )
     # Clap detector node for wake-up detection

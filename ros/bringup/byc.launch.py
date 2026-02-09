@@ -28,14 +28,14 @@ def generate_launch_description():
     
     # Define nodes
     audio_capturer = Node(
-        package='audio_common',
-        executable='audio_capturer_node',
-        name='audio_capturer_node',
+        package='audio_capture',
+        executable='audio_capture_node',
+        name='audio_capture_node',
         output='screen',
         parameters=[{
             'chunk': 480,  # 30ms @ 16kHz = exactly 3 WebRTC frames (160 samples each)
             'rate': 16000,
-            'device': 14  # Use PulseAudio
+            'device': '14'  # audio_capture expects string (PulseAudio device)
         }]
     )
     

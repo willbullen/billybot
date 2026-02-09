@@ -114,37 +114,34 @@ class SimpleAudioPlayer(Node):
         self.msg_count = 0
         
     def audio_callback(self, msg: AudioData):
-        """Handle incoming audio data"""
+        """Handle incoming audio data (ros2 AudioData has .data uint8[]; legacy may have .int16_data)."""
         try:
-            # Get audio data
-            if msg.int16_data:
-                # Convert int16 list to numpy array
+            if getattr(msg, 'data', None):
+                audio_array = np.frombuffer(msg.data, dtype=np.int16)
+            elif getattr(msg, 'int16_data', None):
                 audio_array = np.array(msg.int16_data, dtype=np.int16)
-                
-                # Add to queue directly - no artificial delay
-                try:
-                    self.audio_queue.put_nowait(audio_array)
-                    
-                    # Start playback if not already playing
-                    if not self.playing:
-                        self.get_logger().info(f"Starting playback, queue size: {self.audio_queue.qsize()}")
-                        self.start_playback()
-                        
-                except queue.Full:
-                    self.get_logger().warning("Audio queue full, dropping chunk")
-                    
-                self.msg_count += 1
-                if self.msg_count == 1:
-                    self.get_logger().info(f"First audio chunk received! Size: {len(audio_array)} samples ({len(audio_array)/self.sample_rate:.3f}s)")
-                    self.get_logger().info(f"Queue empty: {self.audio_queue.empty()}, Playing: {self.playing}")
-                    # Don't assume chunk size - just log what we get
-                    if len(audio_array) > self.sample_rate * 2:  # More than 2 seconds
-                        self.get_logger().warning(f"Very large chunk: {len(audio_array)} samples ({len(audio_array)/self.sample_rate:.2f}s @ {self.sample_rate}Hz)")
-                elif self.msg_count <= 10:  # Log first 10 chunks
-                    self.get_logger().info(f"Audio chunk {self.msg_count}: {len(audio_array)} samples")
-                elif self.msg_count % 10 == 0:
-                    self.get_logger().info(f"Received {self.msg_count} audio chunks, queue size: {self.audio_queue.qsize()}")
-                    
+            else:
+                return
+            if len(audio_array) == 0:
+                return
+            # Add to queue directly - no artificial delay
+            try:
+                self.audio_queue.put_nowait(audio_array)
+                if not self.playing:
+                    self.get_logger().info(f"Starting playback, queue size: {self.audio_queue.qsize()}")
+                    self.start_playback()
+            except queue.Full:
+                self.get_logger().warning("Audio queue full, dropping chunk")
+            self.msg_count += 1
+            if self.msg_count == 1:
+                self.get_logger().info(f"First audio chunk received! Size: {len(audio_array)} samples ({len(audio_array)/self.sample_rate:.3f}s)")
+                self.get_logger().info(f"Queue empty: {self.audio_queue.empty()}, Playing: {self.playing}")
+                if len(audio_array) > self.sample_rate * 2:
+                    self.get_logger().warning(f"Very large chunk: {len(audio_array)} samples ({len(audio_array)/self.sample_rate:.2f}s @ {self.sample_rate}Hz)")
+            elif self.msg_count <= 10:
+                self.get_logger().info(f"Audio chunk {self.msg_count}: {len(audio_array)} samples")
+            elif self.msg_count % 10 == 0:
+                self.get_logger().info(f"Received {self.msg_count} audio chunks, queue size: {self.audio_queue.qsize()}")
         except Exception as e:
             self.get_logger().error(f"Error in audio callback: {e}")
             

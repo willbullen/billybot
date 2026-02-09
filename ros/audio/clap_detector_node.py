@@ -7,7 +7,7 @@ Publishes wake commands on double-clap detection
 
 import rclpy
 from rclpy.node import Node
-from audio_common_msgs.msg import AudioStamped
+from audio_common_msgs.msg import AudioDataStamped
 from std_msgs.msg import Bool
 from rclpy.qos import QoSProfile, QoSReliabilityPolicy, QoSHistoryPolicy
 import numpy as np
@@ -66,7 +66,7 @@ class ClapDetectorNode(Node):
         
         # Subscribe to audio
         self.audio_sub = self.create_subscription(
-            AudioStamped,
+            AudioDataStamped,
             self.audio_topic,
             self.audio_callback,
             qos_profile=qos
@@ -208,7 +208,7 @@ class ClapDetectorNode(Node):
                 
         return False
     
-    def audio_callback(self, msg: AudioStamped):
+    def audio_callback(self, msg: AudioDataStamped):
         """Process incoming audio"""
         # Check if detection is enabled
         if not self.enabled:
@@ -217,7 +217,8 @@ class ClapDetectorNode(Node):
         self.callback_count += 1
         
         # Convert ROS audio to numpy array
-        audio_list = msg.audio.audio_data.int16_data
+        # ros2 audio_common_msgs: msg.audio is AudioData with .data uint8[]
+        audio_list = np.frombuffer(msg.audio.data, dtype=np.int16).tolist() if msg.audio.data else []
         if len(audio_list) == 0:
             return
             

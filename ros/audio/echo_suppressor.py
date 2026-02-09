@@ -11,7 +11,7 @@ Author: Karim Virani
 import rclpy
 from rclpy.node import Node
 from rclpy.qos import QoSProfile, QoSReliabilityPolicy, QoSHistoryPolicy
-from audio_common_msgs.msg import AudioStamped
+from audio_common_msgs.msg import AudioDataStamped
 from std_msgs.msg import Bool
 
 
@@ -40,7 +40,7 @@ class EchoSuppressor(Node):
         
         # Subscribe to raw audio input
         self.audio_sub = self.create_subscription(
-            AudioStamped,
+            AudioDataStamped,
             'audio',  # Relative topic - will be in same namespace
             self.audio_callback,
             qos
@@ -48,7 +48,7 @@ class EchoSuppressor(Node):
         
         # Publisher for filtered audio
         self.audio_pub = self.create_publisher(
-            AudioStamped,
+            AudioDataStamped,
             'audio_filtered',  # Relative topic - will be in same namespace
             qos
         )
@@ -64,7 +64,7 @@ class EchoSuppressor(Node):
             self.get_logger().info("🎤 Assistant finished - unmuting microphone")
             self.mute_count = 0
             
-    def audio_callback(self, msg: AudioStamped):
+    def audio_callback(self, msg: AudioDataStamped):
         """Filter audio based on speaking status"""
         # If assistant is speaking, drop the audio
         if self.assistant_speaking:

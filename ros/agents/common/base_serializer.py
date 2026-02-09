@@ -90,13 +90,13 @@ class BaseSerializer(ABC):
                     # Byte data
                     return np.frombuffer(audio_msg.data, dtype=np.int16)
                     
-            elif msg_type == "audio_common_msgs/AudioStamped":
-                # AudioStamped contains AudioData
+            elif msg_type in ("audio_common_msgs/AudioStamped", "audio_common_msgs/AudioDataStamped"):
+                # Stamped message: header + audio (ros2 uses AudioDataStamped with .audio as AudioData)
                 audio_msg = envelope.raw_data.audio
-                if hasattr(audio_msg, 'int16_data'):
-                    return np.array(audio_msg.int16_data, dtype=np.int16)
-                elif hasattr(audio_msg, 'data'):
+                if hasattr(audio_msg, 'data') and audio_msg.data:
                     return np.frombuffer(audio_msg.data, dtype=np.int16)
+                elif hasattr(audio_msg, 'int16_data'):
+                    return np.array(audio_msg.int16_data, dtype=np.int16)
                     
             elif msg_type == "by_your_command/AudioDataUtterance":
                 # Custom utterance message

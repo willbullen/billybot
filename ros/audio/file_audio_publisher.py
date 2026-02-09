@@ -103,10 +103,9 @@ class FileAudioPublisher(Node):
                 # Mix stereo to mono
                 audio_array = audio_array.reshape(-1, 2).mean(axis=1).astype(np.int16)
                 
-            # Create and publish message
+            # Create and publish message (ros2 audio_common_msgs AudioData has .data uint8[])
             msg = AudioData()
-            msg.int16_data = audio_array.tolist()
-            
+            msg.data = audio_array.tobytes()
             self.publisher.publish(msg)
             
             # Log timing info periodically

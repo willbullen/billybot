@@ -81,9 +81,9 @@ def generate_launch_description():
     
     # Audio capture node
     audio_capture_node = Node(
-        package='audio_common',
-        executable='audio_capturer_node',
-        name='audio_capturer_node',
+        package='audio_capture',
+        executable='audio_capture_node',
+        name='audio_capture_node',
         parameters=[{
             'format': 1,  # S16_LE
             'channels': 1,

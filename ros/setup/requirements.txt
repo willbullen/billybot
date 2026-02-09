@@ -1,5 +1,6 @@
 # Python dependencies for ByYourCommand
-openai-whisper>=20250625
+# Note: 20250625 has broken metadata; using last working version
+openai-whisper==20240930
 openai>=1.93.0
 silero-vad>=5.1.2
 torch>=2.7.1
@@ -7,6 +8,7 @@ python-dotenv>=1.1.1
 
 # Audio processing dependencies
 numpy>=1.24.0  # For audio processing
+PyAudio>=0.2.14  # PortAudio bindings for simple_audio_player
 
 # Gemini Live and Pipecat dependencies
 pipecat-ai>=0.0.39  # Pipeline framework for multimodal AI
