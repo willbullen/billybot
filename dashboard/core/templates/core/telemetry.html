@@ -1,0 +1,207 @@
+{% extends "core/base.html" %}
+{% block title %}Telemetry{% endblock %}
+{% block page_title %}Telemetry{% endblock %}
+
+{% block extra_head %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4/dist/chart.umd.min.js"></script>
+{% endblock %}
+
+{% block content %}
+<div x-data="telemetryApp()" x-init="init()">
+
+  <!-- Top metrics row -->
+  <div class="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-6">
+    <template x-for="m in metrics" :key="m.label">
+      <div class="glass rounded-xl p-4">
+        <div class="text-xs font-semibold text-slate-400 uppercase tracking-wider" x-text="m.label"></div>
+        <div class="text-xl font-bold mt-1" :class="m.color" x-text="m.value"></div>
+        <div class="text-xs text-slate-500 mt-0.5" x-text="m.unit"></div>
+      </div>
+    </template>
+  </div>
+
+  <!-- Charts grid -->
+  <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+
+    <!-- Motor speeds chart -->
+    <div class="glass rounded-xl p-5">
+      <h2 class="text-sm font-semibold text-slate-300 uppercase tracking-wider mb-4">Motor Speeds</h2>
+      <div class="relative h-64">
+        <canvas id="motor-speed-chart"></canvas>
+      </div>
+    </div>
+
+    <!-- Motor temperatures -->
+    <div class="glass rounded-xl p-5">
+      <h2 class="text-sm font-semibold text-slate-300 uppercase tracking-wider mb-4">Motor Temperatures</h2>
+      <div class="grid grid-cols-2 gap-4 mt-4">
+        <template x-for="(temp, i) in motorTemps" :key="i">
+          <div class="text-center">
+            <div class="relative w-24 h-24 mx-auto">
+              <svg class="w-24 h-24 transform -rotate-90" viewBox="0 0 36 36">
+                <path d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" fill="none" stroke="#334155" stroke-width="3"/>
+                <path d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" fill="none"
+                      :stroke="temp > 60 ? '#ef4444' : temp > 40 ? '#f59e0b' : '#10b981'"
+                      stroke-width="3" :stroke-dasharray="`${temp}, 100`" stroke-linecap="round"/>
+              </svg>
+              <div class="absolute inset-0 flex items-center justify-center">
+                <span class="text-lg font-bold text-white" x-text="temp + '\u00B0'"></span>
+              </div>
+            </div>
+            <div class="text-xs text-slate-400 mt-2" x-text="motorLabels[i]"></div>
+          </div>
+        </template>
+      </div>
+    </div>
+
+    <!-- Audio energy -->
+    <div class="glass rounded-xl p-5">
+      <h2 class="text-sm font-semibold text-slate-300 uppercase tracking-wider mb-4">Audio Energy</h2>
+      <div class="relative h-64">
+        <canvas id="audio-energy-chart"></canvas>
+      </div>
+    </div>
+
+    <!-- VAD state -->
+    <div class="glass rounded-xl p-5">
+      <h2 class="text-sm font-semibold text-slate-300 uppercase tracking-wider mb-4">Voice Activity</h2>
+      <div class="space-y-3">
+        <div class="flex items-center justify-between p-3 rounded-lg bg-slate-800/50">
+          <span class="text-sm text-slate-400">VAD State</span>
+          <span class="px-3 py-1 rounded-full text-xs font-semibold"
+                :class="vadActive ? 'bg-emerald-500/20 text-emerald-400' : 'bg-slate-600/40 text-slate-400'"
+                x-text="vadActive ? 'Speech Detected' : 'Silent'"></span>
+        </div>
+        <div class="flex items-center justify-between p-3 rounded-lg bg-slate-800/50">
+          <span class="text-sm text-slate-400">Robot State</span>
+          <span class="px-3 py-1 rounded-full text-xs font-semibold"
+                :class="robotAwake ? 'bg-brand-500/20 text-brand-400' : 'bg-amber-500/20 text-amber-400'"
+                x-text="robotAwake ? 'Awake' : 'Sleeping'"></span>
+        </div>
+        <div class="flex items-center justify-between p-3 rounded-lg bg-slate-800/50">
+          <span class="text-sm text-slate-400">AI Session</span>
+          <span class="px-3 py-1 rounded-full text-xs font-semibold"
+                :class="sessionActive ? 'bg-purple-500/20 text-purple-400' : 'bg-slate-600/40 text-slate-400'"
+                x-text="sessionActive ? 'Active' : 'Idle'"></span>
+        </div>
+        <div class="flex items-center justify-between p-3 rounded-lg bg-slate-800/50">
+          <span class="text-sm text-slate-400">Utterances</span>
+          <span class="text-sm font-mono text-brand-400" x-text="utteranceCount"></span>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+function telemetryApp() {
+  return {
+    ws: null,
+    metrics: [
+      { label: 'Audio Rate', value: '-', unit: 'Hz', color: 'text-brand-400' },
+      { label: 'Bridge Latency', value: '-', unit: 'ms', color: 'text-emerald-400' },
+      { label: 'CPU Usage', value: '-', unit: '%', color: 'text-amber-400' },
+      { label: 'Memory', value: '-', unit: 'MB', color: 'text-purple-400' },
+    ],
+    motorTemps: [25, 25, 25, 25],
+    motorLabels: ['Front Left', 'Front Right', 'Rear Left', 'Rear Right'],
+    vadActive: false,
+    robotAwake: true,
+    sessionActive: false,
+    utteranceCount: 0,
+    speedChart: null,
+    audioChart: null,
+    speedData: { FL: [], FR: [], RL: [], RR: [] },
+    audioData: [],
+    maxDataPoints: 60,
+
+    init() {
+      this.initCharts();
+      this.connectWs();
+      // Simulated data refresh for demo
+      setInterval(() => this.updateDemo(), 1000);
+    },
+
+    connectWs() {
+      const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
+      this.ws = new WebSocket(`${proto}//${location.host}/ws/telemetry/`);
+      this.ws.onmessage = (e) => {
+        const data = JSON.parse(e.data);
+        this.handleTelemetry(data);
+      };
+      this.ws.onclose = () => setTimeout(() => this.connectWs(), 3000);
+    },
+
+    handleTelemetry(data) {
+      if (data.type === 'motor_feedback') {
+        this.motorTemps = data.temps || this.motorTemps;
+      }
+      if (data.type === 'vad_state') {
+        this.vadActive = data.active;
+      }
+    },
+
+    initCharts() {
+      const chartColors = { FL: '#3b82f6', FR: '#8b5cf6', RL: '#10b981', RR: '#f59e0b' };
+      const ctx1 = document.getElementById('motor-speed-chart');
+      if (ctx1) {
+        this.speedChart = new Chart(ctx1, {
+          type: 'line',
+          data: {
+            labels: Array(this.maxDataPoints).fill(''),
+            datasets: Object.entries(chartColors).map(([k, c]) => ({
+              label: k, data: [], borderColor: c, backgroundColor: c + '20',
+              borderWidth: 1.5, pointRadius: 0, tension: 0.3, fill: false,
+            }))
+          },
+          options: {
+            responsive: true, maintainAspectRatio: false, animation: false,
+            scales: {
+              x: { display: false },
+              y: { grid: { color: '#1e293b' }, ticks: { color: '#64748b' }, title: { display: true, text: 'RPM', color: '#64748b' } }
+            },
+            plugins: { legend: { labels: { color: '#94a3b8', boxWidth: 12 } } }
+          }
+        });
+      }
+      const ctx2 = document.getElementById('audio-energy-chart');
+      if (ctx2) {
+        this.audioChart = new Chart(ctx2, {
+          type: 'line',
+          data: {
+            labels: Array(this.maxDataPoints).fill(''),
+            datasets: [{ label: 'Energy', data: [], borderColor: '#3b82f6', backgroundColor: '#3b82f620', borderWidth: 1.5, pointRadius: 0, tension: 0.3, fill: true }]
+          },
+          options: {
+            responsive: true, maintainAspectRatio: false, animation: false,
+            scales: {
+              x: { display: false },
+              y: { grid: { color: '#1e293b' }, ticks: { color: '#64748b' }, min: 0, max: 1 }
+            },
+            plugins: { legend: { display: false } }
+          }
+        });
+      }
+    },
+
+    updateDemo() {
+      // Demo data until real topics connected
+      const pushAndTrim = (arr, val) => { arr.push(val); if (arr.length > this.maxDataPoints) arr.shift(); };
+      ['FL','FR','RL','RR'].forEach(k => pushAndTrim(this.speedData[k], Math.random() * 10));
+      pushAndTrim(this.audioData, Math.random() * 0.3);
+
+      if (this.speedChart) {
+        this.speedChart.data.datasets.forEach((ds, i) => { ds.data = this.speedData[Object.keys(this.speedData)[i]]; });
+        this.speedChart.update('none');
+      }
+      if (this.audioChart) {
+        this.audioChart.data.datasets[0].data = this.audioData;
+        this.audioChart.update('none');
+      }
+    }
+  }
+}
+</script>
+{% endblock %}

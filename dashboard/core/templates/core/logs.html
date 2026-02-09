@@ -1,0 +1,94 @@
+{% extends "core/base.html" %}
+{% block title %}Logs{% endblock %}
+{% block page_title %}Logs{% endblock %}
+
+{% block content %}
+<div x-data="logsApp()" x-init="init()">
+
+  <!-- Toolbar -->
+  <div class="flex items-center justify-between mb-6 flex-wrap gap-3">
+    <div class="flex items-center gap-3">
+      <select x-model="selectedContainer" @change="fetchLogs()" class="px-4 py-2 rounded-lg bg-slate-800 border border-slate-700 text-sm text-white focus:outline-none focus:ring-2 focus:ring-brand-500">
+        <option value="billybot-ros2">ROS 2</option>
+        <option value="billybot-nanobot">Nanobot</option>
+        <option value="billybot-dashboard">Dashboard</option>
+      </select>
+      <select x-model="lineCount" @change="fetchLogs()" class="px-4 py-2 rounded-lg bg-slate-800 border border-slate-700 text-sm text-white focus:outline-none focus:ring-2 focus:ring-brand-500">
+        <option value="50">50 lines</option>
+        <option value="100">100 lines</option>
+        <option value="200">200 lines</option>
+        <option value="500">500 lines</option>
+      </select>
+      <input x-model="logFilter" type="text" placeholder="Filter..."
+             class="px-4 py-2 rounded-lg bg-slate-800 border border-slate-700 text-sm text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-brand-500 w-48">
+    </div>
+    <div class="flex items-center gap-3">
+      <label class="flex items-center gap-2 text-sm text-slate-400 cursor-pointer">
+        <input type="checkbox" x-model="autoScroll" class="rounded bg-slate-700 border-slate-600 text-brand-500 focus:ring-brand-500">
+        Auto-scroll
+      </label>
+      <button @click="fetchLogs()" class="px-4 py-2 rounded-lg bg-slate-700 hover:bg-slate-600 text-sm text-white transition-colors">Refresh</button>
+    </div>
+  </div>
+
+  <!-- Log output -->
+  <div class="glass rounded-xl p-4">
+    <div id="log-output" class="font-mono text-xs leading-relaxed max-h-[calc(100vh-16rem)] overflow-y-auto space-y-0">
+      <template x-for="(line, i) in filteredLines" :key="i">
+        <div class="px-2 py-0.5 hover:bg-slate-800/50 rounded"
+             :class="{
+               'text-red-400': line.includes('ERROR') || line.includes('error'),
+               'text-amber-400': line.includes('WARN') || line.includes('warn'),
+               'text-slate-400': !(line.includes('ERROR') || line.includes('error') || line.includes('WARN') || line.includes('warn'))
+             }" x-text="line"></div>
+      </template>
+      <div x-show="filteredLines.length === 0" class="text-slate-500 text-center py-8">
+        <span x-show="loading">Loading logs...</span>
+        <span x-show="!loading">No log lines</span>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+function logsApp() {
+  return {
+    selectedContainer: 'billybot-ros2',
+    lineCount: '100',
+    logFilter: '',
+    logLines: [],
+    autoScroll: true,
+    loading: true,
+
+    get filteredLines() {
+      if (!this.logFilter) return this.logLines;
+      const f = this.logFilter.toLowerCase();
+      return this.logLines.filter(l => l.toLowerCase().includes(f));
+    },
+
+    async init() {
+      await this.fetchLogs();
+      setInterval(() => { if (this.autoScroll) this.fetchLogs(); }, 5000);
+    },
+
+    async fetchLogs() {
+      this.loading = true;
+      try {
+        const r = await fetch(`/api/docker/logs/?container=${this.selectedContainer}&lines=${this.lineCount}`);
+        const data = await r.json();
+        this.logLines = (data.logs || '').split('\n').filter(l => l.trim());
+      } catch(e) { this.logLines = [`Error fetching logs: ${e.message}`]; }
+      this.loading = false;
+      if (this.autoScroll) {
+        this.$nextTick(() => {
+          const el = document.getElementById('log-output');
+          if (el) el.scrollTop = el.scrollHeight;
+        });
+      }
+    }
+  }
+}
+</script>
+{% endblock %}
