@@ -1,0 +1,92 @@
+# BillyBot Docker Compose
+# Runs ByYourCommand (ROS 2) and Nanobot in containers with hardware access.
+#
+# Usage:
+#   cp .env.example .env   # Fill in your API keys
+#   docker compose up -d
+#
+# For Jetson (GPU):
+#   docker compose --profile jetson up -d
+
+services:
+  # ---------------------------------------------------------------------------
+  # ROS 2 - ByYourCommand
+  # Voice interaction, VAD, AI agents, audio pipeline, bridge
+  # ---------------------------------------------------------------------------
+  ros2-byc:
+    build:
+      context: ./ros
+      dockerfile: Dockerfile
+    container_name: billybot-ros2
+    network_mode: host          # Simplifies DDS discovery and audio
+    privileged: false
+    environment:
+      - ROS_DOMAIN_ID=${ROS_DOMAIN_ID:-0}
+      - RMW_IMPLEMENTATION=rmw_cyclonedds_cpp
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - GOOGLE_API_KEY=${GOOGLE_API_KEY:-}
+      - PULSE_SERVER=unix:/run/pulse/native
+    volumes:
+      # ROS 2 source (live editing with symlink-install)
+      - ./ros:/ros2_ws/src/by_your_command:rw
+      # PulseAudio socket for audio I/O
+      - /run/user/1000/pulse:/run/pulse:ro
+      - ~/.config/pulse/cookie:/root/.config/pulse/cookie:ro
+      # Shared memory for CycloneDDS zero-copy transport
+      - /dev/shm:/dev/shm
+      # Tmp for voice recordings
+      - /tmp/prompt_voice:/tmp/prompt_voice
+    devices:
+      # Audio devices (ALSA)
+      - /dev/snd:/dev/snd
+      # UART to DDSM Driver HAT (adjust device path for your Jetson)
+      # Uncomment and set the correct device:
+      # - /dev/ttyTHS1:/dev/ttyTHS1
+      # - /dev/ttyUSB0:/dev/ttyUSB0
+      # USB cameras (RealSense / ZED)
+      # - /dev/bus/usb:/dev/bus/usb
+      # - /dev/video0:/dev/video0
+      # - /dev/video1:/dev/video1
+    # GPU access for Jetson (NVIDIA Container Runtime)
+    # Uncomment for Jetson deployment:
+    # runtime: nvidia
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices:
+    #         - driver: nvidia
+    #           count: all
+    #           capabilities: [gpu]
+    cap_add:
+      - SYS_NICE             # Real-time audio scheduling
+    restart: unless-stopped
+    command: >
+      ros2 launch by_your_command oai_realtime.launch.py
+        openai_api_key:=${OPENAI_API_KEY:-}
+
+  # ---------------------------------------------------------------------------
+  # Nanobot - AI Assistant Framework
+  # Multi-channel bot (Telegram, Slack, WhatsApp, etc.) for remote management
+  # ---------------------------------------------------------------------------
+  nanobot:
+    build:
+      context: ./nanobot
+      dockerfile: Dockerfile
+    container_name: billybot-nanobot
+    ports:
+      - "${NANOBOT_PORT:-18790}:18790"
+    environment:
+      - NANOBOT_LLM_API_KEY=${NANOBOT_LLM_API_KEY:-}
+      - NANOBOT_LLM_MODEL=${NANOBOT_LLM_MODEL:-}
+      - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN:-}
+      - SLACK_BOT_TOKEN=${SLACK_BOT_TOKEN:-}
+      - DISCORD_BOT_TOKEN=${DISCORD_BOT_TOKEN:-}
+    volumes:
+      - nanobot-config:/root/.nanobot
+      - nanobot-workspace:/app/workspace
+    restart: unless-stopped
+    command: start
+
+volumes:
+  nanobot-config:
+  nanobot-workspace:
