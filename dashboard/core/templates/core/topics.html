@@ -1,0 +1,140 @@
+{% extends "core/base.html" %}
+{% block title %}Topics{% endblock %}
+{% block page_title %}Topics Explorer{% endblock %}
+
+{% block content %}
+<div x-data="topicsApp()" x-init="init()">
+
+  <!-- Toolbar -->
+  <div class="flex items-center justify-between mb-6">
+    <div class="flex items-center gap-3">
+      <input x-model="filter" type="text" placeholder="Filter topics..."
+             class="px-4 py-2 rounded-lg bg-slate-800 border border-slate-700 text-sm text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-brand-500 w-64">
+      <button @click="refresh()" class="px-4 py-2 rounded-lg bg-slate-700 hover:bg-slate-600 text-sm text-white transition-colors">Refresh</button>
+    </div>
+    <span class="text-sm text-slate-500" x-text="filteredTopics.length + ' topics'"></span>
+  </div>
+
+  <!-- Two panel layout -->
+  <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+
+    <!-- Topics list -->
+    <div class="glass rounded-xl p-5">
+      <h2 class="text-sm font-semibold text-slate-300 uppercase tracking-wider mb-4">Topics</h2>
+      <div class="space-y-1 max-h-[600px] overflow-y-auto">
+        <template x-for="topic in filteredTopics" :key="topic.name">
+          <button @click="selectTopic(topic)"
+                  class="w-full flex items-center justify-between px-3 py-2.5 rounded-lg text-left text-sm transition-colors"
+                  :class="selectedTopic?.name === topic.name ? 'bg-brand-600/20 text-brand-300 ring-1 ring-brand-500/30' : 'bg-slate-800/50 text-slate-300 hover:bg-slate-700/50'">
+            <span class="font-mono truncate" x-text="topic.name"></span>
+            <span class="text-xs text-slate-500 shrink-0 ml-2" x-text="topic.type || ''"></span>
+          </button>
+        </template>
+        <div x-show="filteredTopics.length === 0" class="text-sm text-slate-500 text-center py-8">
+          <span x-show="loading">Loading...</span>
+          <span x-show="!loading">No topics found</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Topic detail + echo -->
+    <div class="glass rounded-xl p-5">
+      <template x-if="selectedTopic">
+        <div>
+          <h2 class="text-sm font-semibold text-slate-300 uppercase tracking-wider mb-2">Topic Detail</h2>
+          <div class="font-mono text-brand-400 text-sm mb-4" x-text="selectedTopic.name"></div>
+
+          <div class="space-y-2 mb-4">
+            <div class="flex justify-between p-2 rounded bg-slate-800/50 text-sm">
+              <span class="text-slate-400">Type</span>
+              <span class="text-slate-200 font-mono" x-text="selectedTopic.type || 'unknown'"></span>
+            </div>
+            <div class="flex justify-between p-2 rounded bg-slate-800/50 text-sm">
+              <span class="text-slate-400">Publishers</span>
+              <span class="text-slate-200" x-text="selectedTopic.publishers ?? '-'"></span>
+            </div>
+            <div class="flex justify-between p-2 rounded bg-slate-800/50 text-sm">
+              <span class="text-slate-400">Subscribers</span>
+              <span class="text-slate-200" x-text="selectedTopic.subscribers ?? '-'"></span>
+            </div>
+          </div>
+
+          <div class="flex items-center gap-3 mb-3">
+            <button @click="echoTopic()" class="px-4 py-2 rounded-lg bg-brand-600 hover:bg-brand-700 text-white text-sm font-medium transition-colors" :disabled="echoing">
+              <span x-text="echoing ? 'Listening...' : 'Echo Message'"></span>
+            </button>
+            <span class="text-xs text-slate-500">Captures 1 message</span>
+          </div>
+
+          <div x-show="echoResult" class="p-3 rounded-lg bg-slate-900 border border-slate-700 font-mono text-xs text-slate-300 whitespace-pre-wrap max-h-64 overflow-y-auto" x-text="echoResult"></div>
+        </div>
+      </template>
+      <template x-if="!selectedTopic">
+        <div class="flex items-center justify-center h-64 text-slate-500 text-sm">
+          Select a topic to view details
+        </div>
+      </template>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+function topicsApp() {
+  return {
+    topics: [],
+    filter: '',
+    selectedTopic: null,
+    echoing: false,
+    echoResult: '',
+    loading: true,
+
+    get filteredTopics() {
+      if (!this.filter) return this.topics;
+      const f = this.filter.toLowerCase();
+      return this.topics.filter(t => t.name.toLowerCase().includes(f));
+    },
+
+    async init() { await this.refresh(); },
+
+    async refresh() {
+      this.loading = true;
+      try {
+        const r = await fetch('/api/ros2/topics/');
+        const data = await r.json();
+        this.topics = (data.topics || []).map(t => typeof t === 'string' ? { name: t } : t);
+      } catch(e) { this.topics = []; }
+      this.loading = false;
+    },
+
+    async selectTopic(topic) {
+      this.selectedTopic = topic;
+      this.echoResult = '';
+      // Fetch detailed info
+      try {
+        const r = await fetch(`/api/ros2/topic-echo/?topic=${encodeURIComponent(topic.name)}&info=true`);
+        const data = await r.json();
+        if (data.info) {
+          this.selectedTopic = { ...topic, ...data.info };
+        }
+      } catch(e) {}
+    },
+
+    async echoTopic() {
+      if (!this.selectedTopic || this.echoing) return;
+      this.echoing = true;
+      this.echoResult = 'Waiting for message...';
+      try {
+        const r = await fetch(`/api/ros2/topic-echo/?topic=${encodeURIComponent(this.selectedTopic.name)}&count=1`);
+        const data = await r.json();
+        this.echoResult = data.output || data.error || 'No data';
+      } catch(e) {
+        this.echoResult = `Error: ${e.message}`;
+      }
+      this.echoing = false;
+    }
+  }
+}
+</script>
+{% endblock %}

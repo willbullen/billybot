@@ -1,0 +1,247 @@
+{% extends "core/base.html" %}
+{% block title %}Robot Control{% endblock %}
+{% block page_title %}Robot Control{% endblock %}
+
+{% block extra_head %}
+<script src="https://cdnjs.cloudflare.com/ajax/libs/nipplejs/0.10.2/nipplejs.min.js"></script>
+<style>
+  .joystick-zone { touch-action: none; }
+  .estop-btn { box-shadow: 0 0 30px rgba(239, 68, 68, 0.3); }
+  .estop-btn:hover { box-shadow: 0 0 40px rgba(239, 68, 68, 0.5); }
+  .preset-btn { min-width: 88px; min-height: 44px; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div x-data="controlApp()" x-init="init()">
+
+  <!-- Connection + E-Stop bar -->
+  <div class="flex items-center justify-between mb-6">
+    <div class="flex items-center gap-4">
+      <div class="flex items-center gap-2 text-sm">
+        <span class="w-2.5 h-2.5 rounded-full" :class="wsConnected ? 'bg-emerald-500 pulse-dot' : 'bg-red-500'"></span>
+        <span class="text-slate-400" x-text="wsConnected ? 'Bridge connected' : 'Bridge disconnected'"></span>
+      </div>
+      <div class="text-xs text-slate-500 font-mono">
+        Lin: <span x-text="currentLinear.toFixed(2)" class="text-brand-400"></span> |
+        Ang: <span x-text="currentAngular.toFixed(2)" class="text-brand-400"></span>
+      </div>
+    </div>
+    <button @click="emergencyStop()" class="estop-btn px-6 py-3 rounded-xl bg-red-600 hover:bg-red-700 text-white font-bold text-lg uppercase tracking-wider transition-all">
+      E-STOP
+    </button>
+  </div>
+
+  <!-- Main control area -->
+  <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+
+    <!-- Drive joystick -->
+    <div class="glass rounded-xl p-6 flex flex-col items-center">
+      <h2 class="text-sm font-semibold text-slate-400 uppercase tracking-wider mb-2">Drive</h2>
+      <p class="text-xs text-slate-500 mb-4">Forward / Backward / Turn</p>
+      <div id="drive-zone" class="joystick-zone w-52 h-52 rounded-full bg-slate-800/60 border border-slate-700/50 relative"></div>
+      <div class="mt-4 w-full">
+        <label class="text-xs text-slate-500">Max Speed</label>
+        <input type="range" x-model="maxSpeed" min="0.1" max="1.0" step="0.05" class="w-full h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer accent-brand-500">
+        <div class="text-xs text-slate-400 text-center" x-text="(maxSpeed * 100).toFixed(0) + '%'"></div>
+      </div>
+    </div>
+
+    <!-- Camera feed + status -->
+    <div class="glass rounded-xl p-6 flex flex-col">
+      <h2 class="text-sm font-semibold text-slate-400 uppercase tracking-wider mb-4">Camera Feed</h2>
+      <div class="flex-1 bg-slate-800/60 rounded-lg border border-slate-700/50 flex items-center justify-center min-h-[220px]">
+        <div class="text-center text-slate-500">
+          <svg class="w-12 h-12 mx-auto mb-2 text-slate-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"/></svg>
+          <p class="text-sm">Camera not connected</p>
+          <p class="text-xs text-slate-600 mt-1">Requires camera driver (Stage 4)</p>
+        </div>
+      </div>
+      <!-- Voice control -->
+      <div class="flex items-center justify-between mt-4 pt-4 border-t border-slate-700/50">
+        <span class="text-sm text-slate-400">Voice Active</span>
+        <button @click="toggleVoice()" class="relative w-11 h-6 rounded-full transition-colors" :class="voiceActive ? 'bg-brand-600' : 'bg-slate-600'">
+          <span class="absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white shadow transition-transform" :class="voiceActive && 'translate-x-5'"></span>
+        </button>
+      </div>
+    </div>
+
+    <!-- Pan/Tilt joystick -->
+    <div class="glass rounded-xl p-6 flex flex-col items-center">
+      <h2 class="text-sm font-semibold text-slate-400 uppercase tracking-wider mb-2">Camera Pan/Tilt</h2>
+      <p class="text-xs text-slate-500 mb-4">Pan Left/Right / Tilt Up/Down</p>
+      <div id="pantilt-zone" class="joystick-zone w-52 h-52 rounded-full bg-slate-800/60 border border-slate-700/50 relative"></div>
+      <button @click="sendPreset('forward')" class="mt-4 px-4 py-2 rounded-lg bg-slate-700 hover:bg-slate-600 text-sm text-white transition-colors">Home Position</button>
+    </div>
+  </div>
+
+  <!-- Arm presets -->
+  <div class="mt-6 glass rounded-xl p-5">
+    <h2 class="text-sm font-semibold text-slate-400 uppercase tracking-wider mb-4">Arm Presets</h2>
+    <div class="flex flex-wrap gap-3">
+      <template x-for="preset in armPresets" :key="preset.id">
+        <button @click="sendPreset(preset.id)" class="preset-btn px-5 py-2.5 rounded-lg text-sm font-medium transition-all"
+                :class="activePreset === preset.id ? 'bg-brand-600 text-white ring-2 ring-brand-400' : 'bg-slate-700/80 text-slate-300 hover:bg-slate-600'">
+          <span x-text="preset.label"></span>
+        </button>
+      </template>
+    </div>
+  </div>
+
+  <!-- Bearing presets -->
+  <div class="mt-4 glass rounded-xl p-5">
+    <h2 class="text-sm font-semibold text-slate-400 uppercase tracking-wider mb-4">Bearing</h2>
+    <div class="flex flex-wrap gap-3">
+      <template x-for="bearing in bearingPresets" :key="bearing.id">
+        <button @click="sendBearing(bearing.id)" class="preset-btn px-5 py-2.5 rounded-lg text-sm font-medium bg-slate-700/80 text-slate-300 hover:bg-slate-600 transition-all"
+                :class="activeBearing === bearing.id && 'bg-brand-600 text-white ring-2 ring-brand-400'">
+          <span x-text="bearing.label"></span>
+        </button>
+      </template>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+function controlApp() {
+  return {
+    ws: null,
+    wsConnected: false,
+    maxSpeed: 0.5,
+    maxTurn: 1.0,
+    currentLinear: 0,
+    currentAngular: 0,
+    voiceActive: true,
+    activePreset: null,
+    activeBearing: null,
+    driveJoystick: null,
+    pantiltJoystick: null,
+    cmdInterval: null,
+
+    armPresets: [
+      { id: 'bumper', label: 'Bumper' },
+      { id: 'tenhut', label: 'Ten-Hut' },
+      { id: 'lookup', label: 'Look Up' },
+      { id: 'lookout', label: 'Look Out' },
+      { id: 'reach', label: 'Reach' },
+    ],
+
+    bearingPresets: [
+      { id: 'back-left', label: 'Back Left' },
+      { id: 'full-left', label: 'Full Left' },
+      { id: 'left', label: 'Left' },
+      { id: 'leftish', label: 'Leftish' },
+      { id: 'forward', label: 'Forward' },
+      { id: 'rightish', label: 'Rightish' },
+      { id: 'right', label: 'Right' },
+      { id: 'full-right', label: 'Full Right' },
+      { id: 'back-right', label: 'Back Right' },
+      { id: 'back', label: 'Back' },
+    ],
+
+    init() {
+      this.connectWs();
+      this.$nextTick(() => {
+        this.setupDriveJoystick();
+        this.setupPantiltJoystick();
+      });
+    },
+
+    connectWs() {
+      const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
+      this.ws = new WebSocket(`${proto}//${location.host}/ws/ros2/`);
+      this.ws.onopen = () => { this.wsConnected = true; };
+      this.ws.onclose = () => {
+        this.wsConnected = false;
+        setTimeout(() => this.connectWs(), 3000);
+      };
+      this.ws.onerror = () => { this.wsConnected = false; };
+    },
+
+    sendCmd(type, data) {
+      if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+        this.ws.send(JSON.stringify({ type, ...data }));
+      }
+    },
+
+    setupDriveJoystick() {
+      const zone = document.getElementById('drive-zone');
+      if (!zone) return;
+      this.driveJoystick = nipplejs.create({
+        zone, mode: 'static', position: { left: '50%', top: '50%' },
+        color: '#3b82f6', size: 140, threshold: 0.05, fadeTime: 100, multitouch: false,
+      });
+      this.driveJoystick.on('move', (evt, data) => {
+        const force = Math.min(data.force, 1.0);
+        const rad = data.angle.radian;
+        this.currentLinear = Math.sin(rad) * force * this.maxSpeed;
+        this.currentAngular = -Math.cos(rad) * force * this.maxTurn;
+        // Dead zone
+        if (Math.abs(this.currentLinear) < 0.03) this.currentLinear = 0;
+        if (Math.abs(this.currentAngular) < 0.03) this.currentAngular = 0;
+      });
+      this.driveJoystick.on('end', () => {
+        this.currentLinear = 0;
+        this.currentAngular = 0;
+        this.sendCmd('cmd_vel', { linear: {x:0,y:0,z:0}, angular: {x:0,y:0,z:0} });
+      });
+      // Send cmd_vel at 10Hz while joystick active
+      this.cmdInterval = setInterval(() => {
+        if (this.currentLinear !== 0 || this.currentAngular !== 0) {
+          this.sendCmd('cmd_vel', {
+            linear: { x: this.currentLinear, y: 0, z: 0 },
+            angular: { x: 0, y: 0, z: this.currentAngular }
+          });
+        }
+      }, 100);
+    },
+
+    setupPantiltJoystick() {
+      const zone = document.getElementById('pantilt-zone');
+      if (!zone) return;
+      this.pantiltJoystick = nipplejs.create({
+        zone, mode: 'static', position: { left: '50%', top: '50%' },
+        color: '#8b5cf6', size: 140, threshold: 0.05, fadeTime: 100, multitouch: false,
+      });
+      this.pantiltJoystick.on('move', (evt, data) => {
+        const force = Math.min(data.force, 1.0);
+        const rad = data.angle.radian;
+        const pan = -Math.cos(rad) * force;
+        const tilt = Math.sin(rad) * force;
+        this.sendCmd('pantilt', { pan, tilt });
+      });
+      this.pantiltJoystick.on('end', () => {
+        this.sendCmd('pantilt', { pan: 0, tilt: 0 });
+      });
+    },
+
+    emergencyStop() {
+      this.currentLinear = 0;
+      this.currentAngular = 0;
+      this.sendCmd('cmd_vel', { linear: {x:0,y:0,z:0}, angular: {x:0,y:0,z:0} });
+      this.sendCmd('estop', {});
+      // Flash the page red briefly
+      document.body.style.boxShadow = 'inset 0 0 100px rgba(239,68,68,0.3)';
+      setTimeout(() => { document.body.style.boxShadow = ''; }, 500);
+    },
+
+    sendPreset(preset) {
+      this.activePreset = preset;
+      this.sendCmd('arm_preset', { preset });
+    },
+
+    sendBearing(bearing) {
+      this.activeBearing = bearing;
+      this.sendCmd('bearing', { bearing });
+    },
+
+    toggleVoice() {
+      this.voiceActive = !this.voiceActive;
+      this.sendCmd('voice_active', { active: this.voiceActive });
+    },
+  }
+}
+</script>
+{% endblock %}

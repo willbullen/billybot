@@ -1,0 +1,167 @@
+{% extends "core/base.html" %}
+{% block title %}Dashboard{% endblock %}
+{% block page_title %}Dashboard{% endblock %}
+
+{% block content %}
+<div x-data="dashboardApp()" x-init="init()">
+
+  <!-- Status cards row -->
+  <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+    <!-- Container statuses -->
+    <template x-for="c in containers" :key="c.name">
+      <div class="glass rounded-xl p-5">
+        <div class="flex items-center justify-between mb-3">
+          <span class="text-xs font-semibold text-slate-400 uppercase tracking-wider" x-text="c.label"></span>
+          <span class="w-2.5 h-2.5 rounded-full" :class="c.running ? 'bg-emerald-500 pulse-dot' : 'bg-red-500'"></span>
+        </div>
+        <div class="text-2xl font-bold text-white" x-text="c.running ? 'Running' : 'Stopped'"></div>
+        <div class="text-xs text-slate-500 mt-1" x-text="c.status"></div>
+      </div>
+    </template>
+
+    <!-- Node count -->
+    <div class="glass rounded-xl p-5">
+      <div class="flex items-center justify-between mb-3">
+        <span class="text-xs font-semibold text-slate-400 uppercase tracking-wider">ROS 2 Nodes</span>
+        <svg class="w-5 h-5 text-brand-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M5 12h14M5 12a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v4a2 2 0 01-2 2M5 12a2 2 0 00-2 2v4a2 2 0 002 2h14a2 2 0 002-2v-4a2 2 0 00-2-2m-2-4h.01M17 16h.01"/></svg>
+      </div>
+      <div class="text-2xl font-bold text-white" x-text="nodeCount"></div>
+      <div class="text-xs text-slate-500 mt-1">Active nodes</div>
+    </div>
+
+    <!-- Topic count -->
+    <div class="glass rounded-xl p-5">
+      <div class="flex items-center justify-between mb-3">
+        <span class="text-xs font-semibold text-slate-400 uppercase tracking-wider">Topics</span>
+        <svg class="w-5 h-5 text-brand-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
+      </div>
+      <div class="text-2xl font-bold text-white" x-text="topicCount"></div>
+      <div class="text-xs text-slate-500 mt-1">Active topics</div>
+    </div>
+  </div>
+
+  <!-- Two column layout -->
+  <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+    <!-- Nodes list -->
+    <div class="glass rounded-xl p-5">
+      <h2 class="text-sm font-semibold text-slate-300 uppercase tracking-wider mb-4">Active Nodes</h2>
+      <div class="space-y-2 max-h-80 overflow-y-auto">
+        <template x-for="node in nodeList" :key="node">
+          <div class="flex items-center gap-3 px-3 py-2 rounded-lg bg-slate-800/50">
+            <span class="w-2 h-2 rounded-full bg-emerald-500 shrink-0"></span>
+            <span class="text-sm font-mono text-slate-300 truncate" x-text="node"></span>
+          </div>
+        </template>
+        <div x-show="nodeList.length === 0" class="text-sm text-slate-500 text-center py-4">No nodes detected</div>
+      </div>
+    </div>
+
+    <!-- Activity log -->
+    <div class="glass rounded-xl p-5">
+      <h2 class="text-sm font-semibold text-slate-300 uppercase tracking-wider mb-4">Activity Log</h2>
+      <div class="space-y-2 max-h-80 overflow-y-auto" id="activity-log">
+        <template x-for="(entry, i) in activityLog" :key="i">
+          <div class="flex items-start gap-3 px-3 py-2 rounded-lg bg-slate-800/50">
+            <span class="text-xs text-slate-500 shrink-0 mt-0.5 font-mono" x-text="entry.time"></span>
+            <span class="text-sm text-slate-300" x-text="entry.msg"></span>
+          </div>
+        </template>
+        <div x-show="activityLog.length === 0" class="text-sm text-slate-500 text-center py-4">No activity yet</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Quick actions -->
+  <div class="mt-6 glass rounded-xl p-5">
+    <h2 class="text-sm font-semibold text-slate-300 uppercase tracking-wider mb-4">Quick Actions</h2>
+    <div class="flex flex-wrap gap-3">
+      <button @click="quickAction('build')" class="px-4 py-2 rounded-lg bg-brand-600 hover:bg-brand-700 text-white text-sm font-medium transition-colors">Build Workspace</button>
+      <button @click="quickAction('restart')" class="px-4 py-2 rounded-lg bg-amber-600 hover:bg-amber-700 text-white text-sm font-medium transition-colors">Restart ROS 2</button>
+      <button @click="refreshAll()" class="px-4 py-2 rounded-lg bg-slate-700 hover:bg-slate-600 text-white text-sm font-medium transition-colors">Refresh Status</button>
+    </div>
+    <div x-show="actionResult" class="mt-3 p-3 rounded-lg bg-slate-800/80 text-sm font-mono text-slate-300 whitespace-pre-wrap max-h-40 overflow-y-auto" x-text="actionResult"></div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+function dashboardApp() {
+  return {
+    containers: [],
+    nodeList: [],
+    nodeCount: '-',
+    topicCount: '-',
+    activityLog: [],
+    actionResult: '',
+
+    async init() {
+      await this.refreshAll();
+      setInterval(() => this.refreshAll(), 10000);
+    },
+
+    log(msg) {
+      const now = new Date().toLocaleTimeString('en-GB', {hour:'2-digit', minute:'2-digit', second:'2-digit'});
+      this.activityLog.unshift({ time: now, msg });
+      if (this.activityLog.length > 50) this.activityLog.pop();
+    },
+
+    async refreshAll() {
+      this.log('Refreshing system status...');
+      await Promise.all([this.fetchContainers(), this.fetchNodes(), this.fetchTopics()]);
+    },
+
+    async fetchContainers() {
+      try {
+        const r = await fetch('/api/docker/containers/');
+        const data = await r.json();
+        this.containers = data.containers || [];
+      } catch(e) { this.containers = []; }
+    },
+
+    async fetchNodes() {
+      try {
+        const r = await fetch('/api/ros2/nodes/');
+        const data = await r.json();
+        this.nodeList = data.nodes || [];
+        this.nodeCount = this.nodeList.length;
+      } catch(e) { this.nodeList = []; this.nodeCount = '?'; }
+    },
+
+    async fetchTopics() {
+      try {
+        const r = await fetch('/api/ros2/topics/');
+        const data = await r.json();
+        this.topicCount = (data.topics || []).length;
+      } catch(e) { this.topicCount = '?'; }
+    },
+
+    async quickAction(action) {
+      this.actionResult = `Running ${action}...`;
+      this.log(`Quick action: ${action}`);
+      try {
+        let r;
+        if (action === 'build') {
+          r = await fetch('/api/ros2/exec/', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ command: 'cd /ros2_ws && colcon build --packages-select by_your_command --symlink-install' })
+          });
+        } else if (action === 'restart') {
+          r = await fetch('/api/docker/restart/', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ container: 'billybot-ros2' })
+          });
+        }
+        const data = await r.json();
+        this.actionResult = data.output || data.result || JSON.stringify(data);
+        this.log(`${action} completed`);
+      } catch(e) {
+        this.actionResult = `Error: ${e.message}`;
+      }
+    }
+  }
+}
+</script>
+{% endblock %}
