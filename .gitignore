@@ -1,65 +1,19 @@
-# BillyBot Migration - Git Ignore
+# ROS2 build artifacts
+build/
+install/
+log/
 
-# Backup files (contain sensitive data)
-backups/
-*.tar.gz
-*.tar.gz.gpg
-*-backup-*
-backup-*
-
-# Credentials and secrets
-*.key
-*.pem
-*.env
-credentials/
-secrets/
-config/*.json
-!config/*.template
-
-# System files
-.DS_Store
-Thumbs.db
-*.swp
-*.swo
-*~
-
-# Logs
-*.log
-logs/
-migration.log
-
-# Python
+# Python artifacts
+*.pyc
 __pycache__/
-*.py[cod]
-*$py.class
-*.so
-.Python
-venv/
-env/
-ENV/
 
-# Node
-node_modules/
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-.npm
+# Environment files
+.env
+.env.*.local
 
-# IDE
+# IDE files
 .vscode/
 .idea/
-*.sublime-project
-*.sublime-workspace
 
-# Jetson specific
-jtop.log
-tegrastats.log
-
-# Test outputs
-test-results/
-coverage/
-
-# Temporary files
-tmp/
-temp/
-*.tmp
+# Distribution
+*.egg-info/

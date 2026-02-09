@@ -1,0 +1,85 @@
+# OpenAI Realtime Agent Configuration
+openai_realtime_agent:
+  # Agent Identity
+  agent_id: "openai_realtime"
+  
+  # Bridge Connection (WebSocket-based distributed deployment)
+  bridge_connection:
+    type: "websocket"               # Connection type: websocket | direct
+    host: "localhost"               # Bridge WebSocket server host  
+    port: 8765                      # Bridge WebSocket server port
+    reconnect_interval: 5.0         # Seconds between reconnection attempts
+    max_reconnect_attempts: 10      # Maximum reconnection attempts
+    heartbeat_interval: 30          # WebSocket heartbeat interval
+  # OpenAI API Configuration
+  openai_api_key: ""  # Set via OPENAI_API_KEY environment variable
+  model: "gpt-4o-realtime-preview"
+  voice: "echo"  # Options: alloy, echo, fable, onyx, nova, shimmer
+  
+  # Session Management
+  session_pause_timeout: 10.0      # Seconds of silence before session cycling
+  session_max_duration: 120.0      # Maximum session duration (seconds)
+  session_max_tokens: 50000        # Rough token limit per session
+  session_max_cost: 5.00           # Rough cost limit per session ($)
+  
+  # Context Management
+  max_context_tokens: 2000         # Maximum context tokens to preserve
+  max_context_age: 3600           # Maximum age of context (seconds)
+  
+  # Voice Activity Detection (OpenAI API settings)
+  vad_threshold: 0.5              # VAD sensitivity (0.0-1.0)
+  vad_prefix_padding: 300         # Milliseconds of audio before speech
+  vad_silence_duration: 200       # Milliseconds of silence to detect end
+  
+  # Named prompt selection (from prompts.yaml)
+  prompt_id: "barney_command_visual"  # Default single-agent prompt
+  
+  # Legacy system prompt (deprecated - use prompt_id instead)
+  system_prompt: ""
+
+# ROS AI Bridge Configuration (WebSocket-enabled)
+ros_ai_bridge:
+  ros__parameters:
+    # WebSocket Server Settings
+    websocket_server:
+      enabled: true
+      host: "0.0.0.0"          # Listen on all interfaces for distributed deployment
+      port: 8765               # Default WebSocket port
+      max_connections: 10      # Maximum concurrent agent connections
+      auth_required: false     # Authentication (future enhancement)
+      heartbeat_interval: 30   # Seconds between ping/pong
+      
+    # Agent Registration
+    agent_registration:
+      timeout_seconds: 60      # Registration timeout
+      allow_duplicate_ids: false
+      require_capabilities: []  # Required agent capabilities
+    
+    # Queue configuration
+    max_queue_size: 100
+    queue_timeout_ms: 1000
+    drop_policy: "oldest"
+    
+    # Topics to bridge (ROS → Agent)
+    subscribed_topics:
+      - topic: "prompt_voice"  # incoming human voice data (was voice_chunks)
+        msg_type: "by_your_command/AudioDataUtterance"
+      - topic: "prompt_text"    # incoming text prompts (was text_input)
+        msg_type: "std_msgs/String"
+      - topic: "conversation_id" # Bidirectional - external conversation resets
+        msg_type: "std_msgs/String"
+        
+    # Topics to publish (Agent → ROS)
+    published_topics:
+      - topic: "response_voice"   # generated voice response (was audio_out)
+        msg_type: "audio_common_msgs/AudioData"
+      - topic: "response_text"    # response transcript (was llm_transcript)
+        msg_type: "std_msgs/String"
+      - topic: "prompt_transcript" # user voice transcript (NEW!)
+        msg_type: "std_msgs/String"
+      - topic: "cmd_vel"         # bad idea to let an llm give direct motion commands
+        msg_type: "geometry_msgs/Twist"
+      - topic: "conversation_id" # Conversation boundary tracking
+        msg_type: "std_msgs/String"
+      - topic: "interruption_signal" # Signal to clear audio player queue
+        msg_type: "std_msgs/Bool"

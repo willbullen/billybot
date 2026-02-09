@@ -1,0 +1,29 @@
+<?xml version="1.0"?>
+<package format="3">
+  <name>by_your_command</name>
+  <version>0.0.1</version>
+  <description>ByYourCommand: voice, camera, and video interaction package</description>
+
+  <maintainer email="you@todo.todo">TODO: Maintainer Name</maintainer>
+  <license>Apache-2.0</license>
+
+  <buildtool_depend>ament_cmake</buildtool_depend>
+  <buildtool_depend>ament_cmake_python</buildtool_depend>
+
+  <depend>rclpy</depend>
+  <depend>rclcpp</depend>
+  <depend>launch</depend>
+  <depend>launch_ros</depend>
+  <depend>std_msgs</depend>
+  <depend>audio_common_msgs</depend>
+
+  <build_depend>rosidl_default_generators</build_depend>
+  <exec_depend>rosidl_default_runtime</exec_depend>
+  <member_of_group>rosidl_interface_packages</member_of_group>
+
+  <exec_depend>python3</exec_depend>
+
+  <export>
+    <build_type>ament_cmake</build_type>
+  </export>
+</package>

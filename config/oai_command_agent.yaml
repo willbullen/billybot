@@ -1,0 +1,65 @@
+# OpenAI Command Extractor Agent Configuration
+openai_command_agent:
+  # Agent Identity
+  agent_id: "openai_command_extractor"
+  
+  # Bridge Connection (WebSocket-based distributed deployment)
+  bridge_connection:
+    type: "websocket"               # Connection type: websocket | direct
+    host: "localhost"               # Bridge WebSocket server host  
+    port: 8765                      # Bridge WebSocket server port
+    reconnect_interval: 5.0         # Seconds between reconnection attempts
+    max_reconnect_attempts: 10      # Maximum reconnection attempts
+    heartbeat_interval: 30          # WebSocket heartbeat interval
+    
+  # OpenAI API Configuration
+  openai_api_key: ""  # Set via OPENAI_API_KEY environment variable
+  model: "gpt-4o-realtime-preview"
+  voice: "alloy"  # Not used since we disable audio output
+  
+  # Session Management
+  session_pause_timeout: 10.0      # Seconds of silence before session cycling
+  session_max_duration: 120.0      # Maximum session duration (seconds)
+  session_max_tokens: 50000        # Rough token limit per session
+  session_max_cost: 5.00           # Rough cost limit per session ($)
+  
+  # Context Management
+  max_context_tokens: 500          # Smaller context for command extraction
+  max_context_age: 300             # 5 minutes - commands are immediate
+  
+  # Voice Activity Detection (OpenAI API settings)
+  vad_threshold: 0.5              # VAD sensitivity (0.0-1.0)
+  vad_prefix_padding: 300         # Milliseconds of audio before speech
+  vad_silence_duration: 200       # Milliseconds of silence to detect end
+  
+  # Named prompt selection (from prompts.yaml)
+  prompt_id: "barney_command_extractor"  # Command extraction prompt
+  
+  # Published topic configuration - new naming convention
+  response_voice_topic: ""  # Disable audio output for command extractor
+  response_text_topic: ""    # Command agent doesn't publish regular text
+  response_cmd_topic: "response_cmd"  # Command extraction output (was command_transcript)
+  prompt_transcript_topic: "prompt_transcript"  # User voice transcript (NEW!)
+  
+  # Legacy system prompt (deprecated - use prompt_id instead)
+  system_prompt: ""
+
+# ROS AI Bridge Configuration for Command Agent
+ros_ai_bridge_command:
+  ros__parameters:
+    # Topics to bridge (ROS → Agent)
+    subscribed_topics:
+      - topic: "prompt_voice"  # incoming voice data (was voice_chunks)
+        msg_type: "by_your_command/AudioDataUtterance"
+      - topic: "prompt_text"    # incoming text prompts (was text_input)
+        msg_type: "std_msgs/String"
+        
+    # Topics to publish (Agent → ROS) - Different to avoid conflicts
+    published_topics:
+      - topic: "response_cmd"  # outgoing command extraction (was command_transcript)
+        msg_type: "std_msgs/String"
+      - topic: "prompt_transcript"  # user voice transcript (NEW!)
+        msg_type: "std_msgs/String"
+      - topic: "cmd_vel"             # not a good idea to let an llm give direct motion commands
+        msg_type: "geometry_msgs/Twist"
+      # Note: No response_voice - command extractor doesn't speak

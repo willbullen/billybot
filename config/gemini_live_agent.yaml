@@ -1,0 +1,104 @@
+# Gemini Live Agent Configuration
+# 
+# This configuration file sets up the Gemini Live API agent for
+# real-time conversation with optional video support.
+#
+# Author: Karim Virani
+# Date: August 2025
+
+gemini_live_agent:
+  # API Configuration
+  # Set GEMINI_API_KEY or GOOGLE_API_KEY environment variable for security
+  # gemini_api_key: "your-api-key-here"  # Don't commit API keys!
+  
+  # Model Selection
+  # Available models for Live API (from official docs):
+  # - gemini-2.0-flash-live-001 (Gemini 2.0 Flash Live - high quota)
+  # - gemini-live-2.5-flash-preview (Gemini 2.5 Flash Live Preview)
+  # - models/gemini-2.0-flash-exp (experimental - limited quota)
+  model: "models/gemini-live-2.5-flash-preview"
+  
+  # Voice Selection
+  # Available voices: Aoede, Charon, Fenrir, Kore, Puck
+  voice: "Kore"
+  
+  # Proactive Audio
+  # When enabled, the model decides when to speak vs staying silent
+  # Useful for more natural conversation flow
+  proactive_audio: false
+  
+  # Video Support
+  # WARNING: Enabling video reduces session limit to 2 MINUTES!
+  enable_video: true  # TEMPORARILY ENABLED FOR TESTING
+  max_image_age: 5.0  # Maximum age (seconds) for an image to be considered fresh
+  
+  # Note: Camera topic subscription is configured in the bridge config file
+  # The bridge handles rate limiting at the subscription level
+  
+  # Session Management
+  session_pause_timeout: 30.0  # Seconds of silence before cycling session (increased for Gemini response time)
+  max_context_tokens: 2000
+  conversation_timeout: 600.0  # 10 minutes - reset context after this
+  
+  # Agent Identification
+  agent_id: "gemini_live"
+  
+  # Published Topics (relative paths for namespacing) - new naming convention
+  response_voice_topic: "response_voice"  # Audio output (was audio_out)
+  response_text_topic: "response_text"    # Text output (was llm_transcript)
+  prompt_transcript_topic: "prompt_transcript"  # User voice transcript (NEW!)
+  command_detected_topic: "command_detected"
+  interruption_signal_topic: "interruption_signal"
+  
+  # System Prompt
+  # This can be customized for your specific use case
+  system_prompt: |
+    You are a helpful robotic assistant with advanced capabilities.
+    
+    Core abilities:
+    - Natural conversation and question answering
+    - Visual perception (when video is enabled)
+    - Robot control and navigation assistance
+    - Task planning and execution guidance
+    
+    Personality:
+    - Be concise but friendly
+    - Respond naturally to speech
+    - Provide helpful information
+    - If you can see (video enabled), describe what you observe when relevant
+    
+    Remember:
+    - You're integrated into a physical robot
+    - Keep responses appropriate for spoken conversation
+    - Be aware of safety considerations for robot operations
+  
+  # Prompt Selection (if using prompts.yaml)
+  # prompt_id: "assistant_default"
+  
+  # Logging
+  log_level: 20  # INFO level (10=DEBUG, 20=INFO, 30=WARNING, 40=ERROR)
+
+# Example configurations for different use cases:
+
+# For video-enabled assistant (2-minute sessions):
+# gemini_live_agent:
+#   enable_video: true
+#   video_topic: "/camera/image_compressed"
+#   video_frame_interval: 2.0  # Less frequent for bandwidth
+#   system_prompt: |
+#     You are a vision-enabled robotic assistant. 
+#     Describe what you see and help with visual tasks.
+
+# For proactive conversation mode:
+# gemini_live_agent:
+#   proactive_audio: true
+#   system_prompt: |
+#     You are a conversational assistant. Only respond when 
+#     directly addressed or when you have something important to add.
+
+# For command-focused agent:
+# gemini_live_agent:
+#   agent_id: "gemini_command"
+#   system_prompt: |
+#     You are a command extraction specialist. Listen for robot
+#     commands and respond with structured action plans.
