@@ -166,9 +166,12 @@ docker-compose.yml
   │                     ROS workspace mounted at /app/ros2_workspace
   │                     Includes Docker CLI binary
   │
-  └── (planned) dashboard   Django web dashboard
-                             Port: 8000
-                             Touch joystick controls, live telemetry
+  ├── dashboard         Django + Channels + Redis
+  │                     Port: 8000 (Daphne ASGI)
+  │                     Touch joystick controls, live telemetry
+  │                     8 pages, 4 WebSocket consumers, 9 REST APIs
+  │
+  └── redis             Channel layer for Django Channels
 ```
 
 ### Quick Start
@@ -454,7 +457,7 @@ nanobot channels status      # Show channel status
 See `recommendations.md` for the complete analysis and phased development roadmap:
 
 - **Stage 1**: Foundation - Docker environment, nanobot ROS 2 tool, workspace bootstrap **[COMPLETE]**
-- **Stage 2**: Web Dashboard - Django dashboard with touch joystick controls, live telemetry
+- **Stage 2**: Web Dashboard - Django dashboard with touch joystick controls, live telemetry **[COMPLETE]**
 - **Stage 3**: Hardware Integration - DDSM motor driver, URDF, odometry
 - **Stage 4**: Vision & Navigation - Camera driver, nav2, SLAM
 - **Stage 5**: Operations - CI/CD, lifecycle nodes, OTA deployment
@@ -473,7 +476,7 @@ See `recommendations.md` for the complete analysis and phased development roadma
 | Nanobot ROS 2 tool | Working (15 actions via docker exec + file mount) |
 | Nanobot gateway | Running (multi-channel, cron, heartbeat) |
 | Clap detector | Working (standalone ZCR-based) |
-| Web dashboard | Not started |
+| Web dashboard | Running (8 pages, touch joysticks, telemetry, chat) |
 | Motor driver | Not started |
 | Navigation | Not started |
 
