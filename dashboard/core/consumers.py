@@ -4,11 +4,11 @@ import asyncio
 import json
 import subprocess
 
-from channels.generic.websocket import AsyncWebSocketConsumer
+from channels.generic.websocket import AsyncWebsocketConsumer
 from django.conf import settings
 
 
-class Ros2BridgeConsumer(AsyncWebSocketConsumer):
+class Ros2BridgeConsumer(AsyncWebsocketConsumer):
     """Bridges browser WebSocket to ROS 2 topics via docker exec.
 
     Receives commands from the control page (cmd_vel, arm_preset, etc.)
@@ -90,7 +90,7 @@ class Ros2BridgeConsumer(AsyncWebSocketConsumer):
             pass
 
 
-class TelemetryConsumer(AsyncWebSocketConsumer):
+class TelemetryConsumer(AsyncWebsocketConsumer):
     """Streams telemetry data to the browser."""
 
     async def connect(self):
@@ -113,7 +113,7 @@ class TelemetryConsumer(AsyncWebSocketConsumer):
         pass
 
 
-class ChatConsumer(AsyncWebSocketConsumer):
+class ChatConsumer(AsyncWebsocketConsumer):
     """Chat interface to nanobot via docker exec."""
 
     async def connect(self):
@@ -162,7 +162,7 @@ class ChatConsumer(AsyncWebSocketConsumer):
         await self.send(text_data=json.dumps({"content": output}))
 
 
-class LogConsumer(AsyncWebSocketConsumer):
+class LogConsumer(AsyncWebsocketConsumer):
     """Streams container logs in real-time."""
 
     async def connect(self):
