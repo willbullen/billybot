@@ -12,6 +12,7 @@ urlpatterns = [
     path("nodes/", views.nodes, name="nodes"),
     path("chat/", views.chat, name="chat"),
     path("logs/", views.logs, name="logs"),
+    path("vision/", views.vision, name="vision"),
     path("settings/", views.settings_view, name="settings"),
     # API endpoints
     path("api/ros2/exec/", views.api_ros2_exec, name="api_ros2_exec"),
@@ -34,4 +35,9 @@ urlpatterns = [
     path("api/nanobot/workspace/", views.api_nanobot_workspace_file, name="api_nanobot_workspace_file"),
     path("api/nanobot/workspace/update/", views.api_nanobot_workspace_file_update, name="api_nanobot_workspace_file_update"),
     path("api/nanobot/memory/", views.api_nanobot_memory, name="api_nanobot_memory"),
+    # Navigation API
+    path("api/nav/status/", views.api_nav_status, name="api_nav_status"),
+    path("api/nav/goal/", views.api_nav_goal, name="api_nav_goal"),
+    path("api/nav/cancel/", views.api_nav_cancel, name="api_nav_cancel"),
+    path("api/camera/snapshot/", views.api_camera_snapshot, name="api_camera_snapshot"),
 ]

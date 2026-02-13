@@ -1,0 +1,13 @@
+# Camera parameters for BillyBot camera driver node
+
+camera_driver_node:
+  ros__parameters:
+    simulate: false
+    width: 640
+    height: 480
+    fps: 30
+    enable_depth: true
+    jpeg_quality: 80
+    publish_rate: 15.0        # Hz (compressed + raw publish rate)
+    camera_frame_id: "camera_link"
+    depth_frame_id: "camera_depth_frame"

@@ -76,6 +76,11 @@
           <span x-show="sidebarOpen" x-transition>Telemetry</span>
         </a>
 
+        <a href="{% url 'vision' %}" class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors {% active_nav 'vision' %}">
+          <svg class="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"/></svg>
+          <span x-show="sidebarOpen" x-transition>Vision & Nav</span>
+        </a>
+
         <div class="pt-4 pb-2 px-3" x-show="sidebarOpen"><span class="text-xs font-semibold text-cyan-500/50 uppercase tracking-widest">ROS 2</span></div>
         <a href="{% url 'topics' %}" class="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors {% active_nav 'topics' %}">
           <svg class="w-5 h-5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>

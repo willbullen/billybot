@@ -228,6 +228,87 @@ class ChatConsumer(AsyncWebsocketConsumer):
         await self.send(text_data=json.dumps({"type": "chat", "content": output}))
 
 
+class CameraConsumer(AsyncWebsocketConsumer):
+    """Streams camera frames from ROS 2 to the browser via WebSocket.
+
+    Polls /camera/color/compressed (sensor_msgs/CompressedImage) and sends
+    base64-encoded JPEG frames to the browser at ~5 fps.
+    """
+
+    async def connect(self):
+        await self.accept()
+        self._running = True
+        self._container = getattr(settings, "ROS2_CONTAINER_NAME", "billybot-ros2")
+        self._fps = 5
+        asyncio.ensure_future(self._camera_loop())
+
+    async def disconnect(self, close_code):
+        self._running = False
+
+    async def receive(self, text_data=None, bytes_data=None):
+        """Handle control messages from browser (fps adjustment, etc.)."""
+        if not text_data:
+            return
+        try:
+            data = json.loads(text_data)
+        except json.JSONDecodeError:
+            return
+        if "fps" in data:
+            self._fps = max(1, min(int(data["fps"]), 15))
+
+    async def _camera_loop(self):
+        """Poll compressed camera image and push base64 JPEG to browser."""
+        import base64
+
+        while self._running:
+            try:
+                delay = 1.0 / self._fps
+                await asyncio.sleep(delay)
+                frame_b64 = await self._grab_frame()
+                if frame_b64:
+                    await self.send(text_data=json.dumps({
+                        "type": "frame",
+                        "data": frame_b64,
+                        "format": "jpeg",
+                    }))
+            except asyncio.CancelledError:
+                break
+            except Exception:
+                await asyncio.sleep(1)
+
+    async def _grab_frame(self):
+        """Grab one compressed frame via docker exec and return base64 string."""
+        import base64
+
+        cmd = (
+            f"docker exec {self._container} bash -c "
+            "'source /opt/ros/humble/setup.bash && source /ros2_ws/install/setup.bash 2>/dev/null; "
+            "python3 -c \""
+            "import rclpy, base64, sys; "
+            "from sensor_msgs.msg import CompressedImage; "
+            "rclpy.init(); "
+            "node = rclpy.create_node(\\\"_cam_grab\\\"); "
+            "msg = [None]; "
+            "sub = node.create_subscription(CompressedImage, \\\"/camera/color/compressed\\\", lambda m: (msg.__setitem__(0, m), rclpy.shutdown()), 1); "
+            "import threading; t = threading.Timer(2.0, lambda: rclpy.try_shutdown()); t.start(); "
+            "rclpy.spin(node); t.cancel(); node.destroy_node(); "
+            "sys.stdout.buffer.write(base64.b64encode(msg[0].data) if msg[0] else b\\\"\\\"); "
+            "\"'"
+        )
+        try:
+            proc = await asyncio.create_subprocess_shell(
+                cmd,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+            )
+            stdout, _ = await asyncio.wait_for(proc.communicate(), timeout=5)
+            if stdout:
+                return stdout.decode("utf-8", errors="replace").strip()
+            return None
+        except (asyncio.TimeoutError, Exception):
+            return None
+
+
 class LogConsumer(AsyncWebsocketConsumer):
     """Streams container logs in real-time."""
 
