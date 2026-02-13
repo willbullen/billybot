@@ -112,6 +112,12 @@ install(PROGRAMS
 )
 
 install(PROGRAMS
+  nodes/camera_driver_node.py
+  DESTINATION lib/${PROJECT_NAME}
+  RENAME camera_driver_node
+)
+
+install(PROGRAMS
   tests/test_command_processor.py
   DESTINATION lib/${PROJECT_NAME}
   RENAME test_command_processor

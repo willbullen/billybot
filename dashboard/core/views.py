@@ -46,6 +46,10 @@ def logs(request):
     return render(request, "core/logs.html")
 
 
+def vision(request):
+    return render(request, "core/vision.html")
+
+
 def settings_view(request):
     return render(request, "core/settings.html", {
         "ros_domain_id": os.environ.get("ROS_DOMAIN_ID", "0"),
@@ -448,3 +452,98 @@ def api_nanobot_memory(request):
         "memory": memory,
         "daily_files": [f for f in daily_files.strip().split("\n") if f.strip() and "MEMORY.md" not in f],
     })
+
+
+# ---------------------------------------------------------------------------
+# API views: Navigation
+# ---------------------------------------------------------------------------
+
+
+@require_GET
+def api_nav_status(request):
+    """Get navigation stack status (SLAM mode, active goal, map info)."""
+    # Check if nav2 nodes are running
+    nodes_output = _ros2_exec("ros2 node list 2>/dev/null", timeout=5)
+    nav_nodes = [n.strip() for n in nodes_output.split("\n")
+                 if any(k in n for k in ["slam", "controller", "planner", "bt_navigator", "camera"])]
+
+    # Check if camera topic is active
+    topics_output = _ros2_exec("ros2 topic list 2>/dev/null", timeout=5)
+    camera_active = "/camera/color/compressed" in topics_output
+    depth_active = "/camera/depth/image_rect_raw" in topics_output
+    odom_active = "/odom" in topics_output
+    map_active = "/map" in topics_output
+
+    return JsonResponse({
+        "nav_nodes": nav_nodes,
+        "camera_active": camera_active,
+        "depth_active": depth_active,
+        "odom_active": odom_active,
+        "map_active": map_active,
+    })
+
+
+@csrf_exempt
+@require_POST
+def api_nav_goal(request):
+    """Send a navigation goal (PoseStamped) to nav2."""
+    try:
+        data = json.loads(request.body)
+    except json.JSONDecodeError:
+        return JsonResponse({"error": "Invalid JSON"}, status=400)
+
+    x = float(data.get("x", 0))
+    y = float(data.get("y", 0))
+    yaw = float(data.get("yaw", 0))
+
+    # Convert yaw to quaternion (rotation around Z)
+    import math
+    qz = math.sin(yaw / 2.0)
+    qw = math.cos(yaw / 2.0)
+
+    output = _ros2_exec(
+        f"ros2 topic pub --once /goal_pose geometry_msgs/PoseStamped "
+        f"'{{header: {{frame_id: \"map\"}}, pose: {{position: {{x: {x:.3f}, y: {y:.3f}, z: 0.0}}, "
+        f"orientation: {{x: 0.0, y: 0.0, z: {qz:.6f}, w: {qw:.6f}}}}}}}'",
+        timeout=10,
+    )
+    return JsonResponse({"result": output})
+
+
+@csrf_exempt
+@require_POST
+def api_nav_cancel(request):
+    """Cancel the current navigation goal."""
+    output = _ros2_exec(
+        "ros2 topic pub --once /navigate_to_pose/_action/cancel_goal "
+        "action_msgs/CancelGoal '{}'",
+        timeout=5,
+    )
+    return JsonResponse({"result": output})
+
+
+@require_GET
+def api_camera_snapshot(request):
+    """Get a single camera frame as base64 JPEG (for non-WebSocket clients)."""
+    import base64
+
+    cmd = (
+        f"docker exec {shlex.quote(CONTAINER)} bash -c "
+        "'source /opt/ros/humble/setup.bash && source /ros2_ws/install/setup.bash 2>/dev/null; "
+        "python3 -c \""
+        "import rclpy, base64, sys; "
+        "from sensor_msgs.msg import CompressedImage; "
+        "rclpy.init(); "
+        "node = rclpy.create_node(\\\"_snap\\\"); "
+        "msg = [None]; "
+        "sub = node.create_subscription(CompressedImage, \\\"/camera/color/compressed\\\", "
+        "lambda m: (msg.__setitem__(0, m), rclpy.shutdown()), 1); "
+        "import threading; t = threading.Timer(2.0, lambda: rclpy.try_shutdown()); t.start(); "
+        "rclpy.spin(node); t.cancel(); node.destroy_node(); "
+        "sys.stdout.buffer.write(base64.b64encode(msg[0].data) if msg[0] else b\\\"\\\"); "
+        "\"'"
+    )
+    output = _run_sync(cmd, timeout=5)
+    if output and output != "(no output)" and not output.startswith("Error"):
+        return JsonResponse({"image": output, "format": "jpeg"})
+    return JsonResponse({"image": None, "error": "No camera frame available"})

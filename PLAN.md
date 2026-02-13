@@ -23,7 +23,7 @@ BillyBot is a voice-interactive robot platform combining two major systems:
 | **2.1** | HUD Design System | COMPLETE |
 | **2.2** | Nanobot Management UI | COMPLETE |
 | **3** | Hardware Integration | COMPLETE |
-| **4** | Vision & Navigation | NOT STARTED (Gemini vision partial) |
+| **4** | Vision & Navigation | IN PROGRESS |
 | **5** | Operations & Production Hardening | NOT STARTED |
 | **6** | Advanced Capabilities | NOT STARTED |
 
@@ -371,45 +371,90 @@ Dashboard Arm Preset -> WebSocket -> docker exec -> ros2 topic pub /arm_preset
 
 ---
 
-## Stage 4: Vision & Navigation [ ]
+## Stage 4: Vision & Navigation [IN PROGRESS]
 
 **Goal**: Spatial awareness through camera, depth, and autonomous navigation.
 
-### 4.1 Camera Driver Container
+### 4.1 Camera Driver Node [COMPLETE]
 
-- [ ] Camera container (RealSense or ZED)
-- [ ] Publishes: `/camera/color/image_raw`, `/camera/depth/image_rect_raw`, `/camera/imu`, `/camera/pointcloud`
+- [x] Camera driver node (`camera_driver_node.py`) with RealSense D435i support
+- [x] Automatic simulation fallback when no hardware (generates HUD test pattern)
+- [x] Publishes: `/camera/color/image_raw`, `/camera/color/compressed`, `/camera/depth/image_rect_raw`, `/camera/camera_info`
+- [x] Configurable resolution, FPS, JPEG quality via `camera.yaml`
+- [x] Camera launch file: `ros2 launch by_your_command camera.launch.py simulate:=true`
+- [x] `pyrealsense2` added to requirements (x86 only; Jetson uses librealsense system package)
 
-```yaml
-camera:
-  image: ros2-realsense
-  network_mode: host
-  devices:
-    - /dev/bus/usb:/dev/bus/usb
-  environment:
-    - ROS_DOMAIN_ID=0
-```
+### 4.2 Navigation Stack (nav2) [COMPLETE]
 
-### 4.2 Navigation Stack (nav2)
+- [x] Nav2 packages installed in Dockerfile (controller, planner, bt_navigator, lifecycle_manager, costmap_2d, dwb, navfn)
+- [x] SLAM Toolbox installed and configured (`nav2_params.yaml`)
+- [x] DWB local planner tuned for skid-steer (vx/vtheta, no vy)
+- [x] Local costmap: rolling 3m window, depth camera obstacle layer, inflation
+- [x] Global costmap: static + obstacle + inflation layers
+- [x] `depthimage_to_laserscan` bridge (depth image -> LaserScan for SLAM)
+- [x] Full navigation launch: `ros2 launch by_your_command navigation.launch.py simulate:=true`
+- [x] Includes hardware + camera + SLAM + nav2 in one launch
+- [ ] Voice-to-nav: "Go to the kitchen" -> Gemini -> command_processor -> `/goal_pose`
 
-- [ ] SLAM: rtabmap_ros or slam_toolbox
-- [ ] Planner: nav2 with DWB controller (suited for skid-steer)
-- [ ] Costmap: 2D from depth projection
-- [ ] Voice-to-nav: "Go to the kitchen" -> Gemini -> command_processor -> `/nav2/goal_pose`
+### 4.3 Dashboard Integration [COMPLETE]
 
-### 4.3 Dashboard Integration
-
-- [ ] Camera feed panel (MJPEG or WebRTC)
-- [ ] 2D map with robot position, obstacles, and waypoints
-- [ ] Click-to-navigate: tap on map to set goal
-- [ ] SLAM map viewer with save/load controls
+- [x] `CameraConsumer` WebSocket (`ws/camera/`) streams base64 JPEG frames
+- [x] Adjustable stream FPS (1-15 fps via WebSocket control message)
+- [x] Camera feed wired into Control page (replaces placeholder)
+- [x] New **Vision & Nav** dashboard page (`/vision/`) with:
+  - Live camera feed panel with FPS selector
+  - Navigation map panel with click-to-navigate
+  - Robot position indicator (arrow overlay)
+  - Nav goal marker with pulse animation
+  - Navigation controls (X, Y, Yaw inputs + Navigate/Cancel)
+  - Active nav nodes list with launch command reference
+  - Camera info panel (status, topics, frame count)
+- [x] Nav sidebar link added to base.html
+- [x] REST API endpoints: `/api/nav/status/`, `/api/nav/goal/`, `/api/nav/cancel/`, `/api/camera/snapshot/`
+- [ ] Live map rendering from `/map` OccupancyGrid topic
+- [ ] SLAM map save/load UI (save button exists, needs service integration)
 
 ### 4.4 Nanobot Integration
 
 - [ ] Nanobot skill: camera diagnostics
 - [ ] Cron jobs for map backup and camera health
 
-**Partial progress**: Gemini vision integration exists (frame forwarding via `gemini_vision.launch.py`) but no ROS 2 camera driver or nav2 stack.
+### New Files (Stage 4)
+
+| File | Purpose |
+|------|---------|
+| `ros/nodes/camera_driver_node.py` | Camera driver: RealSense + simulation fallback |
+| `ros/config/camera.yaml` | Camera parameters (resolution, FPS, JPEG quality) |
+| `ros/config/nav2_params.yaml` | Nav2 + SLAM Toolbox parameters (DWB, costmaps) |
+| `ros/bringup/camera.launch.py` | Camera-only launch file |
+| `ros/bringup/navigation.launch.py` | Full nav stack: hardware + camera + SLAM + nav2 |
+| `dashboard/core/templates/core/vision.html` | Vision & Navigation dashboard page |
+
+### Modified Files (Stage 4)
+
+| File | Changes |
+|------|---------|
+| `ros/Dockerfile` | Added nav2, slam_toolbox, depthimage_to_laserscan apt packages |
+| `ros/CMakeLists.txt` | Added camera_driver_node install target |
+| `ros/setup/requirements.txt` | Added pyrealsense2 (x86 only) |
+| `dashboard/core/consumers.py` | Added CameraConsumer WebSocket |
+| `dashboard/core/routing.py` | Added ws/camera/ route |
+| `dashboard/core/views.py` | Added vision view + 4 nav/camera API endpoints |
+| `dashboard/dashboard/urls.py` | Added /vision/ + nav/camera API routes |
+| `dashboard/core/templates/core/base.html` | Added Vision & Nav sidebar link |
+| `dashboard/core/templates/core/control.html` | Wired live camera feed into control page |
+
+### Topic Map After Stage 4
+
+| Topic | Type | Publisher | Subscriber |
+|-------|------|-----------|------------|
+| `/camera/color/image_raw` | Image | camera_driver_node | (agents) |
+| `/camera/color/compressed` | CompressedImage | camera_driver_node | Dashboard CameraConsumer |
+| `/camera/depth/image_rect_raw` | Image | camera_driver_node | depthimage_to_laserscan, nav2 costmaps |
+| `/camera/camera_info` | CameraInfo | camera_driver_node | depthimage_to_laserscan |
+| `/scan` | LaserScan | depthimage_to_laserscan | slam_toolbox |
+| `/map` | OccupancyGrid | slam_toolbox | nav2 global costmap |
+| `/goal_pose` | PoseStamped | Dashboard nav UI | nav2 bt_navigator |
 
 ---
 

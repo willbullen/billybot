@@ -1,0 +1,366 @@
+{% extends "core/base.html" %}
+{% block title %}Vision & Navigation{% endblock %}
+{% block page_title %}Vision & Navigation{% endblock %}
+
+{% block extra_head %}
+<style>
+  .hud-panel {
+    background: rgba(30, 41, 59, 0.5);
+    backdrop-filter: blur(12px);
+    border: 1px solid rgba(6, 182, 212, 0.2);
+  }
+  .hud-panel:hover { border-color: rgba(6, 182, 212, 0.35); }
+  .map-canvas {
+    background: repeating-linear-gradient(
+      0deg, rgba(6, 182, 212, 0.03) 0px, transparent 1px, transparent 20px
+    ), repeating-linear-gradient(
+      90deg, rgba(6, 182, 212, 0.03) 0px, transparent 1px, transparent 20px
+    );
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+<div x-data="visionApp()" x-init="init()">
+
+  <!-- Status bar -->
+  <div class="flex items-center justify-between mb-6 flex-wrap gap-3">
+    <div class="flex items-center gap-4 flex-wrap">
+      <div class="flex items-center gap-2 text-sm">
+        <span class="w-2.5 h-2.5 rounded-full" :class="cameraActive ? 'bg-emerald-500 pulse-dot' : 'bg-slate-600'"></span>
+        <span class="text-slate-400" x-text="cameraActive ? 'Camera active' : 'Camera offline'"></span>
+      </div>
+      <div class="flex items-center gap-2 text-sm">
+        <span class="w-2.5 h-2.5 rounded-full" :class="depthActive ? 'bg-emerald-500 pulse-dot' : 'bg-slate-600'"></span>
+        <span class="text-slate-400" x-text="depthActive ? 'Depth active' : 'Depth offline'"></span>
+      </div>
+      <div class="flex items-center gap-2 text-sm">
+        <span class="w-2.5 h-2.5 rounded-full" :class="mapActive ? 'bg-cyan-400 pulse-dot' : 'bg-slate-600'"></span>
+        <span class="text-slate-400" x-text="mapActive ? 'SLAM active' : 'SLAM offline'"></span>
+      </div>
+      <div class="flex items-center gap-2 text-sm">
+        <span class="w-2.5 h-2.5 rounded-full" :class="odomActive ? 'bg-cyan-400 pulse-dot' : 'bg-slate-600'"></span>
+        <span class="text-slate-400" x-text="odomActive ? 'Odom active' : 'Odom offline'"></span>
+      </div>
+    </div>
+    <div class="flex items-center gap-2">
+      <button @click="refreshStatus()" class="hud-btn hud-btn-secondary text-xs">Refresh Status</button>
+      <button @click="cancelNav()" class="hud-btn hud-btn-danger text-xs" x-show="navigating">Cancel Nav</button>
+    </div>
+  </div>
+
+  <!-- Main grid -->
+  <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+
+    <!-- Camera feed -->
+    <div class="hud-panel rounded-xl p-5">
+      <div class="flex items-center justify-between mb-4">
+        <h2 class="hud-section-title mb-0">Camera Feed</h2>
+        <div class="flex items-center gap-2">
+          <select x-model="cameraFps" @change="setCameraFps()" class="hud-input text-xs py-1 px-2">
+            <option value="1">1 fps</option>
+            <option value="3">3 fps</option>
+            <option value="5">5 fps</option>
+            <option value="10">10 fps</option>
+            <option value="15">15 fps</option>
+          </select>
+          <span class="w-2 h-2 rounded-full" :class="camWsConnected ? 'bg-emerald-500' : 'bg-slate-600'"></span>
+        </div>
+      </div>
+      <div class="bg-slate-800/60 rounded-lg border border-cyan-500/20 overflow-hidden relative" style="aspect-ratio: 4/3;">
+        <img x-show="cameraFrame" :src="'data:image/jpeg;base64,' + cameraFrame" class="w-full h-full object-contain" alt="Camera">
+        <div x-show="!cameraFrame" class="absolute inset-0 flex items-center justify-center">
+          <div class="text-center text-slate-500">
+            <svg class="w-16 h-16 mx-auto mb-3 text-slate-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"/></svg>
+            <p class="text-sm">No camera feed</p>
+            <p class="text-xs text-slate-600 mt-1">Launch: ros2 launch by_your_command camera.launch.py</p>
+          </div>
+        </div>
+        <!-- Frame counter -->
+        <div x-show="cameraFrame" class="absolute bottom-2 left-2 text-xs font-mono text-cyan-400/70 bg-slate-900/80 px-2 py-0.5 rounded">
+          <span x-text="frameCount"></span> frames
+        </div>
+      </div>
+    </div>
+
+    <!-- Map / Navigation -->
+    <div class="hud-panel rounded-xl p-5">
+      <div class="flex items-center justify-between mb-4">
+        <h2 class="hud-section-title mb-0">Navigation Map</h2>
+        <div class="flex items-center gap-2">
+          <button @click="saveMap()" class="hud-btn hud-btn-secondary text-xs py-1">Save Map</button>
+        </div>
+      </div>
+      <div class="map-canvas bg-slate-800/60 rounded-lg border border-cyan-500/20 relative overflow-hidden" style="aspect-ratio: 4/3;"
+           @click="handleMapClick($event)">
+        <!-- Map image from SLAM (if available) -->
+        <img x-show="mapImage" :src="'data:image/png;base64,' + mapImage" class="w-full h-full object-contain" alt="Map">
+
+        <!-- Placeholder grid -->
+        <div x-show="!mapImage" class="absolute inset-0 flex items-center justify-center">
+          <div class="text-center text-slate-500">
+            <svg class="w-16 h-16 mx-auto mb-3 text-slate-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1" d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l5.447 2.724A1 1 0 0021 18.382V7.618a1 1 0 00-1.447-.894L15 4m0 13V4m0 0L9 7"/></svg>
+            <p class="text-sm">No map available</p>
+            <p class="text-xs text-slate-600 mt-1">SLAM will generate a map when active</p>
+          </div>
+        </div>
+
+        <!-- Robot position indicator -->
+        <div x-show="robotPose" class="absolute w-4 h-4 -ml-2 -mt-2 pointer-events-none"
+             :style="`left: ${robotScreenX}px; top: ${robotScreenY}px; transform: rotate(${robotYaw}rad);`">
+          <svg viewBox="0 0 16 16" class="w-full h-full">
+            <polygon points="8,0 14,14 8,10 2,14" fill="#06b6d4" fill-opacity="0.8" stroke="#0e7490" stroke-width="1"/>
+          </svg>
+        </div>
+
+        <!-- Click-to-navigate marker -->
+        <div x-show="goalMarker" class="absolute w-5 h-5 -ml-2.5 -mt-2.5 pointer-events-none"
+             :style="`left: ${goalMarker?.x}px; top: ${goalMarker?.y}px;`">
+          <div class="w-full h-full rounded-full border-2 border-cyan-400 bg-cyan-400/20 animate-ping"></div>
+          <div class="absolute inset-0 w-full h-full rounded-full border-2 border-cyan-400 bg-cyan-400/30"></div>
+        </div>
+
+        <!-- Instructions overlay -->
+        <div class="absolute bottom-2 right-2 text-xs font-mono text-slate-500 bg-slate-900/80 px-2 py-0.5 rounded">
+          Click to set nav goal
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Bottom panels -->
+  <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mt-6">
+
+    <!-- Navigation controls -->
+    <div class="hud-panel rounded-xl p-5">
+      <h2 class="hud-section-title">Navigation Controls</h2>
+      <div class="space-y-3">
+        <div class="hud-data-row">
+          <span class="text-sm text-slate-400">Goal X</span>
+          <input type="number" x-model="goalX" step="0.1" class="hud-input w-24 text-xs py-1 text-right">
+        </div>
+        <div class="hud-data-row">
+          <span class="text-sm text-slate-400">Goal Y</span>
+          <input type="number" x-model="goalY" step="0.1" class="hud-input w-24 text-xs py-1 text-right">
+        </div>
+        <div class="hud-data-row">
+          <span class="text-sm text-slate-400">Goal Yaw</span>
+          <input type="number" x-model="goalYaw" step="0.1" class="hud-input w-24 text-xs py-1 text-right">
+        </div>
+        <div class="flex gap-2 pt-2">
+          <button @click="sendNavGoal()" class="hud-btn hud-btn-primary flex-1 text-xs">Navigate</button>
+          <button @click="cancelNav()" class="hud-btn hud-btn-danger flex-1 text-xs">Cancel</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Active nodes -->
+    <div class="hud-panel rounded-xl p-5">
+      <h2 class="hud-section-title">Navigation Nodes</h2>
+      <div class="space-y-2">
+        <template x-if="navNodes.length === 0">
+          <p class="text-xs text-slate-500">No navigation nodes detected. Launch the navigation stack first.</p>
+        </template>
+        <template x-for="node in navNodes" :key="node">
+          <div class="flex items-center gap-2 text-sm">
+            <span class="w-2 h-2 rounded-full bg-emerald-500"></span>
+            <span class="text-slate-300 font-mono text-xs" x-text="node"></span>
+          </div>
+        </template>
+      </div>
+      <div class="mt-4 pt-3 border-t border-slate-700/50">
+        <p class="text-xs text-slate-500 mb-2">Launch commands:</p>
+        <div class="space-y-1">
+          <code class="block text-xs text-cyan-400/70 bg-slate-800/60 rounded px-2 py-1">ros2 launch by_your_command camera.launch.py</code>
+          <code class="block text-xs text-cyan-400/70 bg-slate-800/60 rounded px-2 py-1">ros2 launch by_your_command navigation.launch.py</code>
+        </div>
+      </div>
+    </div>
+
+    <!-- Camera info -->
+    <div class="hud-panel rounded-xl p-5">
+      <h2 class="hud-section-title">Camera Info</h2>
+      <div class="space-y-2">
+        <div class="hud-data-row">
+          <span class="text-sm text-slate-400">Status</span>
+          <span class="text-sm font-mono" :class="cameraActive ? 'text-emerald-400' : 'text-slate-500'" x-text="cameraActive ? 'ONLINE' : 'OFFLINE'"></span>
+        </div>
+        <div class="hud-data-row">
+          <span class="text-sm text-slate-400">Depth</span>
+          <span class="text-sm font-mono" :class="depthActive ? 'text-emerald-400' : 'text-slate-500'" x-text="depthActive ? 'ONLINE' : 'OFFLINE'"></span>
+        </div>
+        <div class="hud-data-row">
+          <span class="text-sm text-slate-400">Stream FPS</span>
+          <span class="text-sm font-mono text-cyan-300" x-text="cameraFps"></span>
+        </div>
+        <div class="hud-data-row">
+          <span class="text-sm text-slate-400">Frames</span>
+          <span class="text-sm font-mono text-cyan-300" x-text="frameCount"></span>
+        </div>
+      </div>
+      <div class="mt-4 pt-3 border-t border-slate-700/50">
+        <h3 class="text-xs font-semibold text-slate-500 mb-2">Topics</h3>
+        <div class="space-y-1 text-xs font-mono text-cyan-400/60">
+          <p>/camera/color/image_raw</p>
+          <p>/camera/color/compressed</p>
+          <p>/camera/depth/image_rect_raw</p>
+          <p>/camera/camera_info</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+function visionApp() {
+  return {
+    // Camera WebSocket
+    camWs: null,
+    camWsConnected: false,
+    cameraFrame: null,
+    cameraFps: '5',
+    frameCount: 0,
+
+    // Nav status
+    cameraActive: false,
+    depthActive: false,
+    odomActive: false,
+    mapActive: false,
+    navNodes: [],
+    navigating: false,
+
+    // Map
+    mapImage: null,
+    robotPose: null,
+    robotScreenX: 0,
+    robotScreenY: 0,
+    robotYaw: 0,
+    goalMarker: null,
+
+    // Nav goal
+    goalX: 0,
+    goalY: 0,
+    goalYaw: 0,
+
+    init() {
+      this.connectCameraWs();
+      this.refreshStatus();
+      // Poll status every 10s
+      setInterval(() => this.refreshStatus(), 10000);
+    },
+
+    connectCameraWs() {
+      const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
+      this.camWs = new WebSocket(`${proto}//${location.host}/ws/camera/`);
+      this.camWs.onopen = () => {
+        this.camWsConnected = true;
+        this.setCameraFps();
+      };
+      this.camWs.onmessage = (e) => {
+        try {
+          const data = JSON.parse(e.data);
+          if (data.type === 'frame' && data.data) {
+            this.cameraFrame = data.data;
+            this.frameCount++;
+          }
+        } catch(err) {}
+      };
+      this.camWs.onclose = () => {
+        this.camWsConnected = false;
+        this.cameraFrame = null;
+        setTimeout(() => this.connectCameraWs(), 5000);
+      };
+      this.camWs.onerror = () => { this.camWsConnected = false; };
+    },
+
+    setCameraFps() {
+      if (this.camWs && this.camWs.readyState === WebSocket.OPEN) {
+        this.camWs.send(JSON.stringify({ fps: parseInt(this.cameraFps) }));
+      }
+    },
+
+    async refreshStatus() {
+      try {
+        const resp = await fetch('/api/nav/status/');
+        const data = await resp.json();
+        this.navNodes = data.nav_nodes || [];
+        this.cameraActive = data.camera_active || false;
+        this.depthActive = data.depth_active || false;
+        this.odomActive = data.odom_active || false;
+        this.mapActive = data.map_active || false;
+      } catch(e) {}
+    },
+
+    handleMapClick(event) {
+      // Convert click position to map coordinates (placeholder: just show marker)
+      const rect = event.currentTarget.getBoundingClientRect();
+      const x = event.clientX - rect.left;
+      const y = event.clientY - rect.top;
+
+      // Show goal marker
+      this.goalMarker = { x, y };
+
+      // Convert pixel to approximate world coordinates
+      // This is a placeholder - real implementation needs map metadata
+      const mapWidth = rect.width;
+      const mapHeight = rect.height;
+      this.goalX = ((x / mapWidth) - 0.5) * 10;  // -5 to 5 meters
+      this.goalY = ((0.5 - y / mapHeight)) * 10;  // -5 to 5 meters
+      this.goalYaw = 0;
+    },
+
+    async sendNavGoal() {
+      this.navigating = true;
+      try {
+        const resp = await fetch('/api/nav/goal/', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            x: parseFloat(this.goalX),
+            y: parseFloat(this.goalY),
+            yaw: parseFloat(this.goalYaw),
+          }),
+        });
+        const data = await resp.json();
+        if (data.error) {
+          console.error('Nav goal error:', data.error);
+        }
+      } catch(e) {
+        console.error('Nav goal failed:', e);
+      }
+    },
+
+    async cancelNav() {
+      this.navigating = false;
+      this.goalMarker = null;
+      try {
+        await fetch('/api/nav/cancel/', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: '{}',
+        });
+      } catch(e) {}
+    },
+
+    async saveMap() {
+      // Trigger SLAM map save via ROS 2
+      try {
+        const resp = await fetch('/api/ros2/exec/', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            command: 'ros2 service call /slam_toolbox/save_map slam_toolbox/srv/SaveMap "{name: {data: /tmp/billybot_map}}"',
+          }),
+        });
+        const data = await resp.json();
+        alert(data.output || 'Map save requested');
+      } catch(e) {
+        alert('Failed to save map');
+      }
+    },
+  }
+}
+</script>
+{% endblock %}
