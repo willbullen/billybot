@@ -428,8 +428,8 @@ Dashboard Arm Preset -> WebSocket -> docker exec -> ros2 topic pub /arm_preset
 
 ### 4.5 Nanobot Integration
 
-- [ ] Nanobot skill: camera diagnostics
-- [ ] Cron jobs for map backup and camera health
+- [x] Nanobot skill: camera diagnostics
+- [x] Cron jobs for map backup and camera health
 
 ### New Files (Stage 4)
 
@@ -516,7 +516,7 @@ Dashboard Arm Preset -> WebSocket -> docker exec -> ros2 topic pub /arm_preset
 - [x] Docker Compose `depends_on` with `condition: service_healthy` for dashboard -> redis
 - [x] Log rotation: json-file driver with 50MB/5 files (ROS), 20MB/3 files (nanobot, dashboard)
 - [x] Dashboard HEALTHCHECK directive in Dockerfile
-- [ ] Nanobot hourly health report cron (can be added via nanobot cron UI)
+- [x] Nanobot hourly health report cron (seeded as default cron job on first start)
 
 ### New Files (Stage 5)
 
