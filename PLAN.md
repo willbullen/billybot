@@ -21,6 +21,7 @@ BillyBot is a voice-interactive robot platform combining two major systems:
 | **1** | Foundation | COMPLETE |
 | **2** | Web Dashboard | COMPLETE |
 | **2.1** | HUD Design System | COMPLETE |
+| **2.2** | Nanobot Management UI | COMPLETE |
 | **3** | Hardware Integration | COMPLETE |
 | **4** | Vision & Navigation | NOT STARTED (Gemini vision partial) |
 | **5** | Operations & Production Hardening | NOT STARTED |
@@ -87,6 +88,36 @@ BillyBot is a voice-interactive robot platform combining two major systems:
 - [x] Glass-morphism panels (`.hud-panel`): backdrop-blur, cyan-tinted borders
 - [x] Title case for readability; uppercase reserved for status readouts and section labels
 - [x] Design documented in `dashboard/HUD_DESIGN_SYSTEM.md`
+
+### 2.2 Nanobot Management UI [COMPLETE]
+
+- [x] Session-persistent chat (nanobot agent -s flag for conversation memory)
+- [x] Model switcher dropdown (Claude Opus/Sonnet/Haiku, GPT-4o, DeepSeek, Gemini, Groq)
+- [x] Config panel with 4 tabs: Config, Tools, Cron, Memory
+- [x] Workspace file editor (AGENTS.md, SOUL.md, USER.md, TOOLS.md, IDENTITY.md)
+- [x] Tools & Skills viewer (built-in + custom skills, TOOLS.md content)
+- [x] Cron job management (list, add, remove, run scheduled jobs)
+- [x] Memory viewer (long-term MEMORY.md + daily notes)
+- [x] Gateway restart button (restarts billybot-nanobot container)
+- [x] Chat history persistence (sessionStorage across page reloads)
+- [x] New Session button (resets session ID for fresh conversations)
+- [x] 10 new REST API endpoints for nanobot management
+- [x] System messages for config changes, model switches, gateway restarts
+
+#### Nanobot API Endpoints
+
+| Endpoint | Method | Purpose |
+|----------|--------|---------|
+| `/api/nanobot/config/` | GET | Read config.json |
+| `/api/nanobot/config/update/` | POST | Write config.json |
+| `/api/nanobot/status/` | GET | Run nanobot status |
+| `/api/nanobot/cron/` | GET | List cron jobs |
+| `/api/nanobot/cron/manage/` | POST | Add/remove/enable/run cron jobs |
+| `/api/nanobot/gateway/restart/` | POST | Restart nanobot container |
+| `/api/nanobot/tools/` | GET | List skills and tools |
+| `/api/nanobot/workspace/` | GET | Read workspace file |
+| `/api/nanobot/workspace/update/` | POST | Write workspace file |
+| `/api/nanobot/memory/` | GET | Read memory files |
 
 ### Architecture
 
