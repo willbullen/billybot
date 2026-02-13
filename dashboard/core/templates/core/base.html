@@ -4,7 +4,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>{% block title %}Dashboard{% endblock %} - BillyBot</title>
+  <title>{% block title %}Dashboard{% endblock %} - BillyBot C2</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
   <script>
@@ -52,12 +52,12 @@
            :class="sidebarOpen ? 'w-64' : 'w-16'" >
       <!-- Logo -->
       <div class="flex items-center gap-3 px-4 h-16 border-b border-cyan-500/20">
-        <div class="w-8 h-8 rounded-lg bg-gradient-to-br from-cyan-500 to-cyan-700 flex items-center justify-center shrink-0">
-          <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg>
+        <div class="w-9 h-9 shrink-0">
+          <img src="{% static 'core/img/billybot-icon.svg' %}" alt="BillyBot" class="w-full h-full">
         </div>
         <div x-show="sidebarOpen" x-transition>
           <span class="font-semibold text-white text-lg tracking-tight block leading-tight">BillyBot</span>
-          <span class="text-xs text-cyan-400/70">Robot Dashboard</span>
+          <span class="text-xs text-cyan-400/70">Command & Control</span>
         </div>
       </div>
 
