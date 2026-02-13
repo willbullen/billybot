@@ -185,6 +185,32 @@ NippleJS color set to `#06b6d4` (cyan-500) for both drive and pan/tilt joysticks
 - Active state: `bg-cyan-500/10 text-white border-l-2 border-cyan-400` (left accent border)
 - Hover state: `hover:bg-slate-700/40 hover:text-white`
 
+### Revision 3 -- Full dashboard HUD conversion
+
+Applied the HUD design system to all 7 remaining dashboard pages. Every page now uses the unified component classes defined in `base.html`.
+
+#### New CSS utility classes added to `base.html`
+- `.hud-panel` -- Glass-morphism panel with cyan border (replaces `.glass`)
+- `.hud-btn` -- Base button styling
+- `.hud-btn-primary` -- Cyan accent button (border + text)
+- `.hud-btn-secondary` -- Slate button (neutral)
+- `.hud-btn-danger` -- Red accent button
+- `.hud-btn-warning` -- Amber accent button
+- `.hud-input` -- Input/select styling with cyan focus ring
+- `.hud-section-title` -- Consistent section headings (cyan, uppercase, tracking-widest)
+- `.hud-data-row` -- Data display rows with slate-800 background
+
+#### Pages updated
+| Page | Key changes |
+|---|---|
+| `dashboard.html` | `.glass` → `.hud-panel`, `text-brand-*` → `text-cyan-*`, quick actions use `hud-btn-*` classes, status cards get `hud-glow` |
+| `telemetry.html` | `.glass` → `.hud-panel`, chart colors updated (FL line now cyan `#06b6d4`), `text-brand-*` → `text-cyan-*`, VAD/Robot state badges use cyan accents |
+| `topics.html` | `.glass` → `.hud-panel`, inputs use `hud-input`, selected topic highlight cyan, echo button `hud-btn-primary` |
+| `nodes.html` | `.glass` → `.hud-panel`, selected node highlight cyan, code output uses `border-cyan-500/10` |
+| `chat.html` | `.glass` → `.hud-panel`, user messages use `bg-cyan-600/20`, thinking dots cyan, quick commands use cyan border hover |
+| `logs.html` | `.glass` → `.hud-panel`, form controls use `hud-input`, checkbox uses `text-cyan-500`, INFO lines highlighted in `text-cyan-300/70` |
+| `settings.html` | `.glass` → `.hud-panel`, env var keys in `text-cyan-400/60`, system info values in `text-cyan-300`, restart buttons use `hud-btn-warning` |
+
 ### Revision 1 (initial)
 1. Replaced Inter (sans-serif) with JetBrains Mono (monospace)
 2. Changed body from `font-sans` to `font-mono`

@@ -7,20 +7,20 @@
 
   <!-- Toolbar -->
   <div class="flex items-center justify-between mb-6">
-    <button @click="refresh()" class="px-4 py-2 rounded-lg bg-slate-700 hover:bg-slate-600 text-sm text-white transition-colors">Refresh</button>
-    <span class="text-sm text-slate-500" x-text="nodeList.length + ' nodes active'"></span>
+    <button @click="refresh()" class="hud-btn hud-btn-secondary">Refresh</button>
+    <span class="text-sm text-cyan-400/60 font-mono" x-text="nodeList.length + ' nodes active'"></span>
   </div>
 
   <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
 
     <!-- Nodes list -->
-    <div class="glass rounded-xl p-5">
-      <h2 class="text-sm font-semibold text-slate-300 uppercase tracking-wider mb-4">Active Nodes</h2>
+    <div class="hud-panel rounded-xl p-5">
+      <h2 class="hud-section-title">Active Nodes</h2>
       <div class="space-y-1 max-h-[600px] overflow-y-auto">
         <template x-for="node in nodeList" :key="node">
           <button @click="selectNode(node)"
                   class="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-left text-sm transition-colors"
-                  :class="selectedNode === node ? 'bg-brand-600/20 text-brand-300 ring-1 ring-brand-500/30' : 'bg-slate-800/50 text-slate-300 hover:bg-slate-700/50'">
+                  :class="selectedNode === node ? 'bg-cyan-600/20 text-cyan-300 ring-1 ring-cyan-500/30 border border-cyan-500/20' : 'bg-slate-800/40 text-slate-300 hover:bg-slate-700/50 border border-transparent'">
             <span class="w-2 h-2 rounded-full bg-emerald-500 shrink-0"></span>
             <span class="font-mono truncate" x-text="node"></span>
           </button>
@@ -30,24 +30,24 @@
     </div>
 
     <!-- Node detail -->
-    <div class="glass rounded-xl p-5">
+    <div class="hud-panel rounded-xl p-5">
       <template x-if="selectedNode">
         <div>
-          <h2 class="text-sm font-semibold text-slate-300 uppercase tracking-wider mb-2">Node Info</h2>
-          <div class="font-mono text-brand-400 text-sm mb-4" x-text="selectedNode"></div>
+          <h2 class="hud-section-title">Node Info</h2>
+          <div class="font-mono text-cyan-400 text-sm mb-4" x-text="selectedNode"></div>
 
           <div x-show="nodeInfoLoading" class="text-sm text-slate-500 text-center py-8">Loading node info...</div>
 
           <div x-show="!nodeInfoLoading && nodeInfo">
             <!-- Raw info -->
-            <div class="p-3 rounded-lg bg-slate-900 border border-slate-700 font-mono text-xs text-slate-300 whitespace-pre-wrap max-h-80 overflow-y-auto" x-text="nodeInfo"></div>
+            <div class="p-3 rounded-lg bg-slate-900/80 border border-cyan-500/10 font-mono text-xs text-slate-300 whitespace-pre-wrap max-h-80 overflow-y-auto" x-text="nodeInfo"></div>
 
             <!-- Parameters section -->
             <div class="mt-4" x-show="nodeParams.length > 0">
-              <h3 class="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">Parameters</h3>
+              <h3 class="text-xs font-semibold text-cyan-400/50 uppercase tracking-wider mb-2">Parameters</h3>
               <div class="space-y-1 max-h-60 overflow-y-auto">
                 <template x-for="param in nodeParams" :key="param">
-                  <div class="flex items-center justify-between px-3 py-2 rounded bg-slate-800/50 text-sm">
+                  <div class="hud-data-row text-sm">
                     <span class="font-mono text-slate-300 truncate" x-text="param"></span>
                   </div>
                 </template>
