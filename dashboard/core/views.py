@@ -4,6 +4,7 @@ import asyncio
 import json
 import os
 import shlex
+import subprocess
 
 from django.conf import settings
 from django.http import JsonResponse
@@ -57,6 +58,7 @@ def settings_view(request):
 # ---------------------------------------------------------------------------
 
 CONTAINER = os.environ.get("ROS2_CONTAINER_NAME", "billybot-ros2")
+NANOBOT_CONTAINER = os.environ.get("NANOBOT_CONTAINER_NAME", "billybot-nanobot")
 
 
 def _run_sync(cmd, timeout=30):
@@ -270,3 +272,179 @@ def api_docker_restart(request):
 
     output = _run_sync(f"docker restart {shlex.quote(container)}", timeout=30)
     return JsonResponse({"result": output})
+
+
+# ---------------------------------------------------------------------------
+# Helpers: Nanobot
+# ---------------------------------------------------------------------------
+
+
+def _nanobot_exec(cmd, timeout=30):
+    """Run a command inside the nanobot container."""
+    escaped = cmd.replace("'", "'\\''")
+    full = f"docker exec {shlex.quote(NANOBOT_CONTAINER)} bash -c '{escaped}'"
+    return _run_sync(full, timeout=timeout)
+
+
+# ---------------------------------------------------------------------------
+# API views: Nanobot
+# ---------------------------------------------------------------------------
+
+
+@require_GET
+def api_nanobot_config(request):
+    """Read nanobot config from the container."""
+    output = _nanobot_exec("cat ~/.nanobot/config.json 2>/dev/null || echo '{}'")
+    try:
+        config = json.loads(output)
+    except json.JSONDecodeError:
+        config = {}
+    return JsonResponse({"config": config, "raw": output})
+
+
+@csrf_exempt
+@require_POST
+def api_nanobot_config_update(request):
+    """Update nanobot config in the container."""
+    try:
+        data = json.loads(request.body)
+    except json.JSONDecodeError:
+        return JsonResponse({"error": "Invalid JSON"}, status=400)
+
+    config_json = json.dumps(data.get("config", {}), indent=2)
+    # Write config via heredoc
+    safe_json = config_json.replace("'", "'\\''")
+    result = _nanobot_exec(
+        f"mkdir -p ~/.nanobot && echo '{safe_json}' > ~/.nanobot/config.json",
+        timeout=10,
+    )
+    return JsonResponse({"result": "ok", "output": result})
+
+
+@require_GET
+def api_nanobot_status(request):
+    """Get nanobot status (config summary, active model, provider keys)."""
+    output = _nanobot_exec("nanobot status 2>&1", timeout=15)
+    return JsonResponse({"output": output})
+
+
+@require_GET
+def api_nanobot_cron_list(request):
+    """List nanobot cron jobs."""
+    output = _nanobot_exec("nanobot cron list 2>&1", timeout=10)
+    # Also try reading the raw JSON
+    raw = _nanobot_exec("cat ~/.nanobot/cron/jobs.json 2>/dev/null || echo '[]'")
+    try:
+        jobs = json.loads(raw)
+    except json.JSONDecodeError:
+        jobs = []
+    return JsonResponse({"output": output, "jobs": jobs})
+
+
+@csrf_exempt
+@require_POST
+def api_nanobot_cron_manage(request):
+    """Add/remove/enable/disable/run a cron job."""
+    try:
+        data = json.loads(request.body)
+    except json.JSONDecodeError:
+        return JsonResponse({"error": "Invalid JSON"}, status=400)
+
+    action = data.get("action", "")
+    if action not in ("add", "remove", "enable", "disable", "run"):
+        return JsonResponse({"error": "Invalid action"}, status=400)
+
+    if action == "add":
+        name = data.get("name", "job")
+        message = data.get("message", "")
+        schedule_type = data.get("schedule_type", "every")
+        schedule_value = data.get("schedule_value", "300")
+        safe_name = shlex.quote(name)
+        safe_msg = shlex.quote(message)
+        if schedule_type == "cron":
+            cmd = f'nanobot cron add -n {safe_name} -m {safe_msg} --cron {shlex.quote(schedule_value)}'
+        else:
+            cmd = f'nanobot cron add -n {safe_name} -m {safe_msg} --every {shlex.quote(str(schedule_value))}'
+        output = _nanobot_exec(cmd, timeout=10)
+    elif action == "remove":
+        job_id = shlex.quote(data.get("id", ""))
+        output = _nanobot_exec(f"nanobot cron remove {job_id}", timeout=10)
+    elif action in ("enable", "disable"):
+        job_id = shlex.quote(data.get("id", ""))
+        output = _nanobot_exec(f"nanobot cron {action} {job_id}", timeout=10)
+    elif action == "run":
+        job_id = shlex.quote(data.get("id", ""))
+        output = _nanobot_exec(f"nanobot cron run {job_id}", timeout=30)
+    else:
+        output = ""
+
+    return JsonResponse({"result": output})
+
+
+@csrf_exempt
+@require_POST
+def api_nanobot_gateway_restart(request):
+    """Restart the nanobot gateway by restarting the container."""
+    output = _run_sync(f"docker restart {shlex.quote(NANOBOT_CONTAINER)}", timeout=30)
+    return JsonResponse({"result": output})
+
+
+@require_GET
+def api_nanobot_tools(request):
+    """List available nanobot tools."""
+    # Read workspace TOOLS.md if it exists
+    tools_md = _nanobot_exec("cat ~/.nanobot/workspace/TOOLS.md 2>/dev/null || echo ''")
+    # List skills
+    skills = _nanobot_exec("ls ~/.nanobot/workspace/skills/ 2>/dev/null || echo ''")
+    builtin_skills = _nanobot_exec("ls /app/nanobot/skills/ 2>/dev/null || echo ''")
+    return JsonResponse({
+        "tools_md": tools_md,
+        "custom_skills": [s for s in skills.strip().split("\n") if s.strip()],
+        "builtin_skills": [s for s in builtin_skills.strip().split("\n") if s.strip()],
+    })
+
+
+@require_GET
+def api_nanobot_workspace_file(request):
+    """Read a file from the nanobot workspace."""
+    filename = request.GET.get("file", "")
+    allowed = ("AGENTS.md", "SOUL.md", "USER.md", "TOOLS.md", "IDENTITY.md")
+    if filename not in allowed:
+        return JsonResponse({"error": f"File must be one of: {', '.join(allowed)}"}, status=400)
+    content = _nanobot_exec(f"cat ~/.nanobot/workspace/{shlex.quote(filename)} 2>/dev/null || echo ''")
+    return JsonResponse({"filename": filename, "content": content})
+
+
+@csrf_exempt
+@require_POST
+def api_nanobot_workspace_file_update(request):
+    """Write a file to the nanobot workspace."""
+    try:
+        data = json.loads(request.body)
+    except json.JSONDecodeError:
+        return JsonResponse({"error": "Invalid JSON"}, status=400)
+
+    filename = data.get("file", "")
+    allowed = ("AGENTS.md", "SOUL.md", "USER.md", "TOOLS.md", "IDENTITY.md")
+    if filename not in allowed:
+        return JsonResponse({"error": f"File must be one of: {', '.join(allowed)}"}, status=400)
+
+    content = data.get("content", "")
+    safe_content = content.replace("'", "'\\''")
+    result = _nanobot_exec(
+        f"mkdir -p ~/.nanobot/workspace && echo '{safe_content}' > ~/.nanobot/workspace/{filename}",
+        timeout=10,
+    )
+    return JsonResponse({"result": "ok", "output": result})
+
+
+@require_GET
+def api_nanobot_memory(request):
+    """Read nanobot memory files."""
+    memory = _nanobot_exec("cat ~/.nanobot/workspace/memory/MEMORY.md 2>/dev/null || echo ''")
+    # List daily files
+    daily_files = _nanobot_exec("ls -1 ~/.nanobot/workspace/memory/*.md 2>/dev/null || echo ''")
+    return JsonResponse({
+        "memory": memory,
+        "daily_files": [f for f in daily_files.strip().split("\n") if f.strip() and "MEMORY.md" not in f],
+    })

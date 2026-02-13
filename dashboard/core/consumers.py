@@ -147,11 +147,19 @@ class TelemetryConsumer(AsyncWebsocketConsumer):
 
 
 class ChatConsumer(AsyncWebsocketConsumer):
-    """Chat interface to nanobot via docker exec."""
+    """Chat interface to nanobot via docker exec.
+
+    Maintains a session ID per WebSocket connection so nanobot remembers
+    conversation history across messages.
+    """
 
     async def connect(self):
         await self.accept()
         self.container = settings.NANOBOT_CONTAINER_NAME
+        # Generate a session ID for this WebSocket connection
+        import uuid
+        self.session_id = f"dashboard-{uuid.uuid4().hex[:12]}"
+        self.model_override = None
 
     async def disconnect(self, close_code):
         pass
@@ -164,16 +172,41 @@ class ChatConsumer(AsyncWebsocketConsumer):
         except json.JSONDecodeError:
             return
 
+        msg_type = data.get("type", "chat")
+
+        # Handle model switch
+        if msg_type == "set_model":
+            self.model_override = data.get("model") or None
+            await self.send(text_data=json.dumps({
+                "type": "model_changed",
+                "model": self.model_override or "(default)",
+            }))
+            return
+
+        # Handle session reset
+        if msg_type == "reset_session":
+            import uuid
+            self.session_id = f"dashboard-{uuid.uuid4().hex[:12]}"
+            await self.send(text_data=json.dumps({
+                "type": "session_reset",
+                "session_id": self.session_id,
+            }))
+            return
+
         message = data.get("message", "").strip()
         if not message:
             return
 
-        # Run nanobot agent with the message
+        # Build nanobot command with session persistence
         safe_msg = message.replace("'", "'\\''")
-        cmd = (
-            f"docker exec {self.container} "
-            f"nanobot agent -m '{safe_msg}' --no-markdown"
-        )
+        cmd_parts = [
+            f"docker exec {self.container}",
+            "nanobot agent",
+            f"-m '{safe_msg}'",
+            f"-s '{self.session_id}'",
+            "--no-markdown",
+        ]
+        cmd = " ".join(cmd_parts)
 
         try:
             proc = await asyncio.create_subprocess_shell(
@@ -192,7 +225,7 @@ class ChatConsumer(AsyncWebsocketConsumer):
         except Exception as e:
             output = f"Error: {e}"
 
-        await self.send(text_data=json.dumps({"content": output}))
+        await self.send(text_data=json.dumps({"type": "chat", "content": output}))
 
 
 class LogConsumer(AsyncWebsocketConsumer):
