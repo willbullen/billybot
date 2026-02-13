@@ -8,11 +8,11 @@
   <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
 
     <!-- Container configuration -->
-    <div class="glass rounded-xl p-5">
-      <h2 class="text-sm font-semibold text-slate-300 uppercase tracking-wider mb-4">Containers</h2>
+    <div class="hud-panel rounded-xl p-5">
+      <h2 class="hud-section-title">Containers</h2>
       <div class="space-y-3">
         <template x-for="c in containers" :key="c.name">
-          <div class="flex items-center justify-between p-3 rounded-lg bg-slate-800/50">
+          <div class="hud-data-row">
             <div>
               <div class="text-sm font-medium text-white" x-text="c.label"></div>
               <div class="text-xs text-slate-500 font-mono" x-text="c.name"></div>
@@ -20,7 +20,7 @@
             <div class="flex items-center gap-3">
               <span class="w-2 h-2 rounded-full" :class="c.running ? 'bg-emerald-500' : 'bg-red-500'"></span>
               <button @click="restartContainer(c.name)"
-                      class="px-3 py-1.5 rounded-lg bg-amber-600/20 text-amber-400 hover:bg-amber-600/30 text-xs font-medium transition-colors">
+                      class="hud-btn hud-btn-warning text-xs !px-3 !py-1.5">
                 Restart
               </button>
             </div>
@@ -30,12 +30,12 @@
     </div>
 
     <!-- Environment -->
-    <div class="glass rounded-xl p-5">
-      <h2 class="text-sm font-semibold text-slate-300 uppercase tracking-wider mb-4">Environment</h2>
+    <div class="hud-panel rounded-xl p-5">
+      <h2 class="hud-section-title">Environment</h2>
       <div class="space-y-2 max-h-80 overflow-y-auto">
         <template x-for="(v, k) in envVars" :key="k">
-          <div class="flex items-center justify-between p-2 rounded bg-slate-800/50 text-sm">
-            <span class="font-mono text-slate-400 truncate" x-text="k"></span>
+          <div class="hud-data-row text-sm">
+            <span class="font-mono text-cyan-400/60 truncate" x-text="k"></span>
             <span class="font-mono text-slate-300 truncate ml-2" x-text="v"></span>
           </div>
         </template>
@@ -43,47 +43,47 @@
     </div>
 
     <!-- Launch configurations -->
-    <div class="glass rounded-xl p-5">
-      <h2 class="text-sm font-semibold text-slate-300 uppercase tracking-wider mb-4">Launch Configurations</h2>
+    <div class="hud-panel rounded-xl p-5">
+      <h2 class="hud-section-title">Launch Configurations</h2>
       <div class="space-y-2">
         <template x-for="launch in launches" :key="launch.file">
-          <div class="p-3 rounded-lg bg-slate-800/50">
-            <div class="text-sm font-mono text-slate-300" x-text="launch.file"></div>
-            <div class="text-xs text-slate-500 mt-1" x-text="launch.description"></div>
+          <div class="hud-data-row flex-col !items-start gap-1">
+            <div class="text-sm font-mono text-cyan-300" x-text="launch.file"></div>
+            <div class="text-xs text-slate-500" x-text="launch.description"></div>
           </div>
         </template>
       </div>
     </div>
 
     <!-- System info -->
-    <div class="glass rounded-xl p-5">
-      <h2 class="text-sm font-semibold text-slate-300 uppercase tracking-wider mb-4">System Info</h2>
+    <div class="hud-panel rounded-xl p-5">
+      <h2 class="hud-section-title">System Info</h2>
       <div class="space-y-2">
-        <div class="flex justify-between p-2 rounded bg-slate-800/50 text-sm">
+        <div class="hud-data-row text-sm">
           <span class="text-slate-400">ROS 2 Version</span>
-          <span class="text-slate-200">Humble</span>
+          <span class="text-cyan-300">Humble</span>
         </div>
-        <div class="flex justify-between p-2 rounded bg-slate-800/50 text-sm">
+        <div class="hud-data-row text-sm">
           <span class="text-slate-400">ROS Domain ID</span>
-          <span class="text-slate-200 font-mono">{{ ros_domain_id }}</span>
+          <span class="text-cyan-300 font-mono">{{ ros_domain_id }}</span>
         </div>
-        <div class="flex justify-between p-2 rounded bg-slate-800/50 text-sm">
+        <div class="hud-data-row text-sm">
           <span class="text-slate-400">DDS Middleware</span>
-          <span class="text-slate-200">CycloneDDS</span>
+          <span class="text-cyan-300">CycloneDDS</span>
         </div>
-        <div class="flex justify-between p-2 rounded bg-slate-800/50 text-sm">
+        <div class="hud-data-row text-sm">
           <span class="text-slate-400">Bridge WebSocket</span>
-          <span class="text-slate-200 font-mono">{{ ros2_bridge_ws }}</span>
+          <span class="text-cyan-300 font-mono">{{ ros2_bridge_ws }}</span>
         </div>
-        <div class="flex justify-between p-2 rounded bg-slate-800/50 text-sm">
+        <div class="hud-data-row text-sm">
           <span class="text-slate-400">Dashboard</span>
-          <span class="text-slate-200">Django + Channels + Daphne</span>
+          <span class="text-cyan-300">Django + Channels + Daphne</span>
         </div>
       </div>
     </div>
   </div>
 
-  <div x-show="actionResult" class="mt-4 glass rounded-xl p-4">
+  <div x-show="actionResult" class="mt-4 hud-panel rounded-xl p-4">
     <div class="text-sm font-mono text-slate-300 whitespace-pre-wrap" x-text="actionResult"></div>
   </div>
 </div>

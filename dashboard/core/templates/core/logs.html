@@ -8,38 +8,39 @@
   <!-- Toolbar -->
   <div class="flex items-center justify-between mb-6 flex-wrap gap-3">
     <div class="flex items-center gap-3">
-      <select x-model="selectedContainer" @change="fetchLogs()" class="px-4 py-2 rounded-lg bg-slate-800 border border-slate-700 text-sm text-white focus:outline-none focus:ring-2 focus:ring-brand-500">
+      <select x-model="selectedContainer" @change="fetchLogs()" class="hud-input">
         <option value="billybot-ros2">ROS 2</option>
         <option value="billybot-nanobot">Nanobot</option>
         <option value="billybot-dashboard">Dashboard</option>
       </select>
-      <select x-model="lineCount" @change="fetchLogs()" class="px-4 py-2 rounded-lg bg-slate-800 border border-slate-700 text-sm text-white focus:outline-none focus:ring-2 focus:ring-brand-500">
+      <select x-model="lineCount" @change="fetchLogs()" class="hud-input">
         <option value="50">50 lines</option>
         <option value="100">100 lines</option>
         <option value="200">200 lines</option>
         <option value="500">500 lines</option>
       </select>
       <input x-model="logFilter" type="text" placeholder="Filter..."
-             class="px-4 py-2 rounded-lg bg-slate-800 border border-slate-700 text-sm text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-brand-500 w-48">
+             class="hud-input w-48">
     </div>
     <div class="flex items-center gap-3">
       <label class="flex items-center gap-2 text-sm text-slate-400 cursor-pointer">
-        <input type="checkbox" x-model="autoScroll" class="rounded bg-slate-700 border-slate-600 text-brand-500 focus:ring-brand-500">
+        <input type="checkbox" x-model="autoScroll" class="rounded bg-slate-700 border-cyan-500/30 text-cyan-500 focus:ring-cyan-500/50">
         Auto-scroll
       </label>
-      <button @click="fetchLogs()" class="px-4 py-2 rounded-lg bg-slate-700 hover:bg-slate-600 text-sm text-white transition-colors">Refresh</button>
+      <button @click="fetchLogs()" class="hud-btn hud-btn-secondary">Refresh</button>
     </div>
   </div>
 
   <!-- Log output -->
-  <div class="glass rounded-xl p-4">
+  <div class="hud-panel rounded-xl p-4">
     <div id="log-output" class="font-mono text-xs leading-relaxed max-h-[calc(100vh-16rem)] overflow-y-auto space-y-0">
       <template x-for="(line, i) in filteredLines" :key="i">
         <div class="px-2 py-0.5 hover:bg-slate-800/50 rounded"
              :class="{
                'text-red-400': line.includes('ERROR') || line.includes('error'),
                'text-amber-400': line.includes('WARN') || line.includes('warn'),
-               'text-slate-400': !(line.includes('ERROR') || line.includes('error') || line.includes('WARN') || line.includes('warn'))
+               'text-cyan-300/70': line.includes('INFO') || line.includes('info'),
+               'text-slate-400': !(line.includes('ERROR') || line.includes('error') || line.includes('WARN') || line.includes('warn') || line.includes('INFO') || line.includes('info'))
              }" x-text="line"></div>
       </template>
       <div x-show="filteredLines.length === 0" class="text-slate-500 text-center py-8">
