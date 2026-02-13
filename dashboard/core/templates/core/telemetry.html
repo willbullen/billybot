@@ -111,6 +111,7 @@ function telemetryApp() {
     robotAwake: true,
     sessionActive: false,
     utteranceCount: 0,
+    lastMotorFeedbackTime: 0,
     speedChart: null,
     audioChart: null,
     speedData: { FL: [], FR: [], RL: [], RR: [] },
@@ -135,8 +136,22 @@ function telemetryApp() {
     },
 
     handleTelemetry(data) {
-      if (data.type === 'motor_feedback') {
-        this.motorTemps = data.temps || this.motorTemps;
+      if (data.type === 'motor_feedback' && data.data) {
+        const d = data.data;
+        this.lastMotorFeedbackTime = Date.now();
+        this.motorTemps = [
+          d.left_temp ?? this.motorTemps[0],
+          d.right_temp ?? this.motorTemps[1],
+          d.left_temp ?? this.motorTemps[2],
+          d.right_temp ?? this.motorTemps[3]
+        ];
+        const leftRpm = d.left_speed ?? 0, rightRpm = d.right_speed ?? 0;
+        const push = (arr, val) => { arr.push(val); if (arr.length > this.maxDataPoints) arr.shift(); };
+        ['FL','FR','RL','RR'].forEach((k, i) => push(this.speedData[k], i % 2 === 0 ? leftRpm : rightRpm));
+        if (this.speedChart) {
+          this.speedChart.data.datasets.forEach((ds, i) => { ds.data = this.speedData[Object.keys(this.speedData)[i]]; });
+          this.speedChart.update('none');
+        }
       }
       if (data.type === 'vad_state') {
         this.vadActive = data.active;
@@ -187,15 +202,16 @@ function telemetryApp() {
     },
 
     updateDemo() {
-      // Demo data until real topics connected
       const pushAndTrim = (arr, val) => { arr.push(val); if (arr.length > this.maxDataPoints) arr.shift(); };
-      ['FL','FR','RL','RR'].forEach(k => pushAndTrim(this.speedData[k], Math.random() * 10));
-      pushAndTrim(this.audioData, Math.random() * 0.3);
-
-      if (this.speedChart) {
-        this.speedChart.data.datasets.forEach((ds, i) => { ds.data = this.speedData[Object.keys(this.speedData)[i]]; });
-        this.speedChart.update('none');
+      const hasRealMotor = (Date.now() - this.lastMotorFeedbackTime) < 3000;
+      if (!hasRealMotor) {
+        ['FL','FR','RL','RR'].forEach(k => pushAndTrim(this.speedData[k], Math.random() * 10));
+        if (this.speedChart) {
+          this.speedChart.data.datasets.forEach((ds, i) => { ds.data = this.speedData[Object.keys(this.speedData)[i]]; });
+          this.speedChart.update('none');
+        }
       }
+      pushAndTrim(this.audioData, Math.random() * 0.3);
       if (this.audioChart) {
         this.audioChart.data.datasets[0].data = this.audioData;
         this.audioChart.update('none');

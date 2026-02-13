@@ -1,0 +1,30 @@
+# Hardware parameters for DDSM and ST3215 driver nodes
+
+ddsm_driver_node:
+  ros__parameters:
+    serial_port: "/dev/ttyTHS1"
+    baud_rate: 115200
+    simulate: false
+    wheel_separation: 0.30      # meters
+    wheel_radius: 0.05          # meters (DDSM210 hub wheel)
+    max_linear_speed: 1.0       # m/s
+    max_angular_speed: 3.0      # rad/s
+    cmd_vel_timeout: 0.5        # seconds
+    feedback_rate: 20.0        # Hz
+    odom_frame_id: "odom"
+    base_frame_id: "base_link"
+    encoder_counts_per_rev: 4096
+    publish_tf: true
+
+st3215_driver_node:
+  ros__parameters:
+    serial_port: "/dev/ttyUSB0"
+    baud_rate: 1000000
+    simulate: false
+    servo_ids: [1, 2]           # pan, tilt
+    feedback_rate: 10.0        # Hz
+    preset_bumper:  [2048, 3072]
+    preset_tenhut:  [2048, 2048]
+    preset_lookup:  [2048, 1024]
+    preset_lookout: [2048, 1536]
+    preset_reach:   [2048, 512]

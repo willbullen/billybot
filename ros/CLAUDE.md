@@ -25,10 +25,16 @@ sudo apt install ros-$ROS_DISTRO-audio-common ros-$ROS_DISTRO-audio-common-msgs 
 # Launch all nodes
 ros2 launch by_your_command byc.launch.py
 
+# Hardware (DDSM + ST3215 + robot_state_publisher). Use simulate:=true without serial ports.
+ros2 launch by_your_command hardware.launch.py
+ros2 launch by_your_command hardware.launch.py simulate:=true
+
 # Launch individual nodes
 ros2 run by_your_command silero_vad_node
 ros2 run by_your_command interaction_node  
 ros2 run by_your_command voice_chunk_recorder
+ros2 run by_your_command ddsm_driver_node
+ros2 run by_your_command st3215_driver_node
 
 # Test scripts
 ros2 run by_your_command test_utterance_chunks
@@ -69,7 +75,10 @@ ByYourCommand is a ROS 2 package for voice-controlled interactions using:
   - `pause_detector.py`: Intelligent pause detection for session management
 - `agents/oai_realtime/oai_realtime_agent.py`: OpenAI Realtime API integration with interruption handling
 - `bringup/oai_realtime.launch.py`: Complete real-time conversational system launch
+- `bringup/hardware.launch.py`: robot_state_publisher + ddsm_driver_node + st3215_driver_node (URDF, /odom, /motor_feedback, /joint_states)
 - `config/prompts.yaml`: System prompts with recursive macro definitions
+- **Hardware package** (`hardware/`): `ddsm_serial.py` (DDSM210 UART JSON), `st3215_serial.py` (ST3215 TTL servos). Both support simulation when serial is unavailable.
+- **Hardware nodes**: `ddsm_driver_node` (/cmd_vel → motors, /odom, /motor_feedback, /joint_states, TF); `st3215_driver_node` (/grunt1/arm_preset, /joint_command → /joint_states, services calibrate, set_servo_mode)
 
 ### Data Flow
 

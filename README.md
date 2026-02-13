@@ -119,6 +119,8 @@ ByYourCommand is the ROS 2 package that handles real-time voice interaction, vis
 | `oai_realtime_agent` | OpenAI Realtime API agent |
 | `gemini_live_agent` | Google Gemini Live agent with vision |
 | `command_processor` | Command extraction and routing to robot subsystems |
+| `ddsm_driver_node` | /cmd_vel → DDSM210 motors, /odom, /motor_feedback, /joint_states, TF |
+| `st3215_driver_node` | /grunt1/arm_preset, /joint_command → ST3215 servos → /joint_states |
 | `voice_chunk_recorder` | Debug recording of voice utterances |
 | `echo_suppressor` | Audio feedback loop prevention |
 
@@ -458,6 +460,7 @@ See `recommendations.md` for the complete analysis and phased development roadma
 
 - **Stage 1**: Foundation - Docker environment, nanobot ROS 2 tool, workspace bootstrap **[COMPLETE]**
 - **Stage 2**: Web Dashboard - Django dashboard with touch joystick controls, live telemetry **[COMPLETE]**
+- **Stage 3**: Hardware Integration - DDSM/ST3215 drivers, URDF, odometry, dashboard telemetry **[COMPLETE]**
 - **Stage 3**: Hardware Integration - DDSM motor driver, URDF, odometry
 - **Stage 4**: Vision & Navigation - Camera driver, nav2, SLAM
 - **Stage 5**: Operations - CI/CD, lifecycle nodes, OTA deployment

@@ -35,7 +35,7 @@ class Ros2BridgeConsumer(AsyncWebsocketConsumer):
         if msg_type == "cmd_vel":
             await self._publish_cmd_vel(data)
         elif msg_type == "arm_preset":
-            await self._publish_string("/arm_preset", data.get("preset", ""))
+            await self._publish_string("/grunt1/arm_preset", data.get("preset", ""))
         elif msg_type == "bearing":
             await self._publish_string("/behavior_command", data.get("bearing", ""))
         elif msg_type == "voice_active":
@@ -91,23 +91,56 @@ class Ros2BridgeConsumer(AsyncWebsocketConsumer):
 
 
 class TelemetryConsumer(AsyncWebsocketConsumer):
-    """Streams telemetry data to the browser."""
+    """Streams telemetry data to the browser (motor_feedback from ROS 2)."""
 
     async def connect(self):
         await self.accept()
         self._running = True
+        self._container = getattr(settings, "ROS2_CONTAINER_NAME", "billybot-ros2")
         asyncio.ensure_future(self._telemetry_loop())
 
     async def disconnect(self, close_code):
         self._running = False
 
     async def _telemetry_loop(self):
-        """Periodically check ROS 2 system status and send updates."""
+        """Poll /motor_feedback via docker exec ~1 Hz and push to browser."""
         while self._running:
             try:
-                await asyncio.sleep(2)
+                await asyncio.sleep(1)
+                data = await self._poll_motor_feedback()
+                if data is not None:
+                    await self.send(text_data=json.dumps({"type": "motor_feedback", "data": data}))
             except asyncio.CancelledError:
                 break
+            except Exception:
+                pass
+
+    async def _poll_motor_feedback(self):
+        """One-shot read of /motor_feedback (std_msgs/String JSON). Returns parsed dict or None."""
+        cmd = (
+            f"docker exec {self._container} bash -c "
+            "'source /opt/ros/humble/setup.bash && source /ros2_ws/install/setup.bash 2>/dev/null; "
+            "timeout 1 ros2 topic echo --once /motor_feedback std_msgs/String 2>/dev/null'"
+        )
+        try:
+            proc = await asyncio.create_subprocess_shell(
+                cmd,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+            )
+            stdout, _ = await asyncio.wait_for(proc.communicate(), timeout=3)
+            if not stdout:
+                return None
+            text = stdout.decode("utf-8", errors="replace")
+            # ros2 topic echo prints "data: '<json>'" or "data: \"<json>\""
+            for line in text.splitlines():
+                line = line.strip()
+                if line.startswith("data:"):
+                    val = line[5:].strip().strip('"').strip("'")
+                    return json.loads(val)
+            return None
+        except (asyncio.TimeoutError, json.JSONDecodeError, ValueError):
+            return None
 
     async def receive(self, text_data=None, bytes_data=None):
         pass

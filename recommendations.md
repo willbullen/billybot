@@ -43,8 +43,8 @@ BillyBot is a voice-interactive robot platform combining two major systems:
 
 ### Remaining Areas for Improvement
 
-1. **No motor driver** - No `cmd_vel` to UART/JSON driver node. Robot can't move yet.
-2. **No URDF** - No robot model, TF tree, or joint state publisher.
+1. **~~No motor driver~~** - Stage 3 complete. DDSM driver node: cmd_vel → motors, odom, motor_feedback.
+2. **~~No URDF~~** - Stage 3 complete. billybot.urdf.xml + robot_state_publisher, TF tree.
 3. **~~No web dashboard~~** - Dashboard complete (Stage 2). Touch joysticks, telemetry, chat.
 4. **No navigation** - No nav2, SLAM, or obstacle avoidance.
 5. **No CI/CD** - No automated testing or container builds.
@@ -354,7 +354,7 @@ nanobot cron add --name "dashboard-health" \
 
 ---
 
-### Stage 3: Hardware Integration (Motors + URDF + Odometry)
+### Stage 3: Hardware Integration (Motors + URDF + Odometry) [COMPLETE]
 
 **Goal**: Make the robot move. Nanobot drives development of hardware drivers.
 

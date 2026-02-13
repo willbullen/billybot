@@ -15,6 +15,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     ros-humble-launch-ros \
     ros-humble-launch-xml \
     ros-humble-rmw-cyclonedds-cpp \
+    ros-humble-robot-state-publisher \
+    ros-humble-tf2-ros \
+    ros-humble-joint-state-publisher \
     ros-humble-diagnostic-updater \
     libboost-all-dev \
     libgstreamer1.0-dev \

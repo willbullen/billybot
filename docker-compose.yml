@@ -39,10 +39,9 @@ services:
     devices:
       # Audio devices (ALSA)
       - /dev/snd:/dev/snd
-      # UART to DDSM Driver HAT (adjust device path for your Jetson)
-      # Uncomment and set the correct device:
-      # - /dev/ttyTHS1:/dev/ttyTHS1
-      # - /dev/ttyUSB0:/dev/ttyUSB0
+      # Jetson: UART for DDSM Driver HAT and ST3215 servos. Uncomment on real hardware.
+      # - /dev/ttyTHS1:/dev/ttyTHS1   # DDSM210 motors (typical Jetson UART)
+      # - /dev/ttyUSB0:/dev/ttyUSB0   # ST3215 servos (USB-TTL adapter)
       # USB cameras (RealSense / ZED)
       # - /dev/bus/usb:/dev/bus/usb
       # - /dev/video0:/dev/video0
