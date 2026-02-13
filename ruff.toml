@@ -1,0 +1,33 @@
+# Ruff linting configuration for BillyBot
+# Applies to dashboard/ and ros/ Python code
+
+line-length = 120
+target-version = "py312"
+
+[lint]
+select = [
+  "E",    # pycodestyle errors
+  "F",    # pyflakes
+  "I",    # isort
+  "N",    # pep8-naming
+  "W",    # pycodestyle warnings
+  "B",    # flake8-bugbear
+  "S",    # flake8-bandit (security)
+  "UP",   # pyupgrade
+]
+ignore = [
+  "E501",   # line too long (handled by formatter)
+  "S101",   # assert usage (fine in tests)
+  "S603",   # subprocess without shell=True check (we use docker exec deliberately)
+  "S607",   # partial executable path (docker commands)
+  "B008",   # function call in default argument (Django patterns)
+]
+
+[lint.per-file-ignores]
+"**/tests/**" = ["S101", "S105", "S106"]
+"ros/nodes/**" = ["N802", "N803"]  # ROS callback naming conventions
+"ros/agents/**" = ["N802", "N803"]
+
+[format]
+quote-style = "double"
+indent-style = "space"

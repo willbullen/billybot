@@ -5,12 +5,16 @@ import json
 import os
 import shlex
 import subprocess
+import time
 
 from django.conf import settings
 from django.http import JsonResponse
 from django.shortcuts import render
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_GET, require_POST
+
+# Track dashboard start time for uptime reporting
+_START_TIME = time.time()
 
 
 # ---------------------------------------------------------------------------
@@ -547,3 +551,65 @@ def api_camera_snapshot(request):
     if output and output != "(no output)" and not output.startswith("Error"):
         return JsonResponse({"image": output, "format": "jpeg"})
     return JsonResponse({"image": None, "error": "No camera frame available"})
+
+
+# ---------------------------------------------------------------------------
+# API views: Health & Observability
+# ---------------------------------------------------------------------------
+
+
+@require_GET
+def api_health(request):
+    """Health check endpoint for Docker healthcheck and monitoring."""
+    uptime = time.time() - _START_TIME
+    return JsonResponse({
+        "status": "ok",
+        "uptime": round(uptime, 1),
+        "service": "billybot-dashboard",
+    })
+
+
+@require_GET
+def api_system_health(request):
+    """Comprehensive system health check across all containers."""
+    health = {
+        "dashboard": {"status": "ok", "uptime": round(time.time() - _START_TIME, 1)},
+        "containers": [],
+        "ros2": {"nodes": [], "topics_count": 0},
+    }
+
+    # Check containers
+    output = _run_sync(
+        "docker ps -a --filter name=billybot --format '{{.Names}}|{{.Status}}|{{.State}}'",
+        timeout=5,
+    )
+    for line in output.strip().split("\n"):
+        if "|" not in line:
+            continue
+        parts = line.split("|")
+        health["containers"].append({
+            "name": parts[0].strip(),
+            "status": parts[1].strip() if len(parts) > 1 else "",
+            "running": (parts[2].strip() if len(parts) > 2 else "") == "running",
+        })
+
+    # Check ROS 2 node count
+    nodes_output = _ros2_exec("ros2 node list 2>/dev/null", timeout=5)
+    ros_nodes = [n.strip() for n in nodes_output.split("\n") if n.strip().startswith("/")]
+    health["ros2"]["nodes"] = ros_nodes
+    health["ros2"]["topics_count"] = len([
+        t for t in _ros2_exec("ros2 topic list 2>/dev/null", timeout=5).split("\n")
+        if t.strip().startswith("/")
+    ])
+
+    # Overall status
+    running_containers = sum(1 for c in health["containers"] if c["running"])
+    total_containers = len(health["containers"])
+    if running_containers == total_containers and total_containers >= 3:
+        health["overall"] = "healthy"
+    elif running_containers > 0:
+        health["overall"] = "degraded"
+    else:
+        health["overall"] = "unhealthy"
+
+    return JsonResponse(health)
