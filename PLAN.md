@@ -21,7 +21,7 @@ BillyBot is a voice-interactive robot platform combining two major systems:
 | **1** | Foundation | COMPLETE |
 | **2** | Web Dashboard | COMPLETE |
 | **2.1** | HUD Design System | COMPLETE |
-| **3** | Hardware Integration | COMPLETE (ddsm_serial.py missing) |
+| **3** | Hardware Integration | COMPLETE |
 | **4** | Vision & Navigation | NOT STARTED (Gemini vision partial) |
 | **5** | Operations & Production Hardening | NOT STARTED |
 | **6** | Advanced Capabilities | NOT STARTED |
@@ -166,7 +166,7 @@ docker-compose.yml
 | File | Purpose | Status |
 |------|---------|--------|
 | `ros/hardware/__init__.py` | Python package for hardware serial modules | [x] |
-| `ros/hardware/ddsm_serial.py` | DDSM210 UART JSON protocol (with simulation fallback) | **MISSING** |
+| `ros/hardware/ddsm_serial.py` | DDSM210 UART JSON protocol (with simulation fallback) | [x] |
 | `ros/hardware/st3215_serial.py` | ST3215 TTL servo protocol (with simulation fallback) | [x] |
 | `ros/nodes/ddsm_driver_node.py` | ROS 2 node: `/cmd_vel` -> motors -> `/odom` + `/motor_feedback` + `/joint_states` | [x] |
 | `ros/nodes/st3215_driver_node.py` | ROS 2 node: `/arm_preset` + `/joint_command` -> servos -> `/joint_states` | [x] |
