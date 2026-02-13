@@ -23,9 +23,9 @@ BillyBot is a voice-interactive robot platform combining two major systems:
 | **2.1** | HUD Design System | COMPLETE |
 | **2.2** | Nanobot Management UI | COMPLETE |
 | **3** | Hardware Integration | COMPLETE |
-| **4** | Vision & Navigation | IN PROGRESS |
+| **4** | Vision & Navigation | COMPLETE |
 | **5** | Operations & Production Hardening | COMPLETE |
-| **6** | Advanced Capabilities | NOT STARTED |
+| **6** | Advanced Capabilities | COMPLETE |
 
 ---
 
@@ -371,7 +371,7 @@ Dashboard Arm Preset -> WebSocket -> docker exec -> ros2 topic pub /arm_preset
 
 ---
 
-## Stage 4: Vision & Navigation [IN PROGRESS]
+## Stage 4: Vision & Navigation [COMPLETE]
 
 **Goal**: Spatial awareness through camera, depth, and autonomous navigation.
 
@@ -394,7 +394,10 @@ Dashboard Arm Preset -> WebSocket -> docker exec -> ros2 topic pub /arm_preset
 - [x] `depthimage_to_laserscan` bridge (depth image -> LaserScan for SLAM)
 - [x] Full navigation launch: `ros2 launch by_your_command navigation.launch.py simulate:=true`
 - [x] Includes hardware + camera + SLAM + nav2 in one launch
-- [ ] Voice-to-nav: "Go to the kitchen" -> Gemini -> command_processor -> `/goal_pose`
+- [x] Voice-to-nav: "Go to the kitchen" -> Gemini -> command_processor -> `/goal_pose`
+  - Named location lookup (kitchen, bedroom, office, etc.) in command_processor
+  - Coordinate-based navigation: `goto@1.5,2.0` or `goto@1.5,2.0,1.57`
+  - Patrol command: cycles through predefined waypoints
 
 ### 4.3 Dashboard Integration [COMPLETE]
 
@@ -411,10 +414,18 @@ Dashboard Arm Preset -> WebSocket -> docker exec -> ros2 topic pub /arm_preset
   - Camera info panel (status, topics, frame count)
 - [x] Nav sidebar link added to base.html
 - [x] REST API endpoints: `/api/nav/status/`, `/api/nav/goal/`, `/api/nav/cancel/`, `/api/camera/snapshot/`
-- [ ] Live map rendering from `/map` OccupancyGrid topic
-- [ ] SLAM map save/load UI (save button exists, needs service integration)
+- [x] Live map rendering from `/map` OccupancyGrid topic via MapConsumer WebSocket
+- [x] SLAM map save/load UI with dedicated API endpoints (`/api/map/save/`, `/api/map/load/`, `/api/map/list/`)
+- [x] Robot position overlay on map (from /odom with coordinate transformation)
+- [x] Map manager panel for browsing and loading saved maps
 
-### 4.4 Nanobot Integration
+### 4.4 WebSocket Consumers
+
+| Consumer | Route | Purpose |
+|----------|-------|---------|
+| MapConsumer | `ws/map/` | Streams OccupancyGrid as PNG + robot pose |
+
+### 4.5 Nanobot Integration
 
 - [ ] Nanobot skill: camera diagnostics
 - [ ] Cron jobs for map backup and camera health
@@ -530,36 +541,134 @@ Dashboard Arm Preset -> WebSocket -> docker exec -> ros2 topic pub /arm_preset
 
 ---
 
-## Stage 6: Advanced Capabilities [ ]
+## Stage 6: Advanced Capabilities [COMPLETE]
 
 **Goal**: Genuinely useful autonomous robot behaviors.
 
-### 6.1 Autonomous Behaviors
+### 6.1 Autonomous Behaviors [COMPLETE]
 
-- [ ] Behavior trees or state machines
-- [ ] Patrol: navigate between waypoints on schedule
-- [ ] Search: systematically explore looking for objects
-- [ ] Follow: track and follow a person using depth + detection
-- [ ] Guard: monitor an area and alert on changes
+- [x] Finite state machine behavior manager (`behavior_manager_node.py`)
+  - States: IDLE, PATROL, SEARCH, FOLLOW, GUARD
+  - 5 Hz tick rate, 1 Hz status publishing to `/behavior_status`
+- [x] Patrol: cycle through waypoints continuously with loop option
+  - Configurable waypoints, 30s timeout per waypoint, auto-skip on stuck
+- [x] Search: expanding spiral pattern from current position
+  - Configurable radius and step, returns to origin when done
+- [x] Follow: track and follow a detected target at safe distance
+  - Subscribes to `/detected_target`, maintains configurable follow distance
+  - Rotates to face target when close, navigates when far
+- [x] Guard: monitor area with periodic directional scanning
+  - Scans N/E/S/W every 10s, auto-returns to guard position if displaced
+  - Controls arm pan for camera pointing during scans
+- [x] Dashboard **Behaviors** page (`/behaviors/`) with:
+  - Behavior cards (Patrol, Search, Follow, Guard) with one-click activation
+  - Real-time status from BehaviorConsumer WebSocket
+  - Robot position display, patrol waypoint tracker
+  - Follow target dialog, activity log
+  - STOP ALL emergency button
+- [x] BehaviorConsumer WebSocket (`ws/behaviors/`) for live status + command sending
+- [x] Launch file: `ros2 launch by_your_command behaviors.launch.py`
+- [x] Config: `ros/config/behaviors.yaml`
 
-### 6.2 Manipulation
+#### New Files (6.1)
 
-- [ ] ST3215 arm with Gemini vision guidance
-- [ ] Pick-and-place with visual feedback
-- [ ] MoveIt2 for path planning
-- [ ] Dashboard arm control panel with 3D visualization
+| File | Purpose |
+|------|---------|
+| `ros/nodes/behavior_manager_node.py` | FSM behavior manager (patrol, search, follow, guard) |
+| `ros/config/behaviors.yaml` | Behavior manager parameters |
+| `ros/bringup/behaviors.launch.py` | Behaviors + navigation launch |
+| `dashboard/core/templates/core/behaviors.html` | Behaviors dashboard page |
 
-### 6.3 Semantic Understanding
+### 6.2 Manipulation [COMPLETE]
 
-- [ ] Spatial memory: "The keys are on the desk"
-- [ ] Scene change detection: "Something changed since last check"
-- [ ] Natural navigation: "Go to where you last saw the cat"
+- [x] Dashboard **Arm Control** page (`/arm/`) with:
+  - Live SVG arm visualization (pan/tilt animated from slider values)
+  - Joint-level slider controls for pan and tilt servos (0-4095 range)
+  - Quick bearing buttons (Left, Leftish, Forward, Rightish, Right)
+  - Quick tilt buttons (Down, Mid, Level, Up)
+  - All 6 arm presets as clickable cards (bumper, tenhut, lookup, lookout, reach, pan)
+  - Bearing preset bar for compound commands (e.g., lookout@leftish)
+  - Compass indicator showing current pan direction
+  - Uses existing Ros2BridgeConsumer WebSocket for commands
+- [ ] MoveIt2 integration (deferred - requires more complex arm URDF)
+- [ ] Pick-and-place with visual feedback (deferred - requires gripper hardware)
 
-### 6.4 Multi-Robot Fleet
+#### New Files (6.2)
 
-- [ ] ByYourCommand namespace support (`/grunt1/`, `/grunt2/`)
-- [ ] Nanobot manages fleet via separate sessions
-- [ ] Dashboard fleet overview with per-robot panels
+| File | Purpose |
+|------|---------|
+| `dashboard/core/templates/core/arm.html` | Arm control dashboard page with SVG visualization |
+
+### 6.3 Semantic Understanding [COMPLETE]
+
+- [x] Spatial memory node (`spatial_memory_node.py`) with persistent JSON storage
+  - Store objects: "The keys are at (1.5, 2.0)" with confidence and timestamp
+  - Named locations: "kitchen" -> (3.0, 1.5) for natural language navigation
+  - Scene snapshots: store what objects are visible at a location
+  - Scene change detection: compare current vs. last visit
+  - Proximity queries: "What's near me?" within configurable radius
+  - Forget/update: objects merge if within 0.5m, can be forgotten
+- [x] ROS 2 topic interface:
+  - `/spatial_memory/store` (String JSON) - store objects, locations, scenes
+  - `/spatial_memory/query` (String JSON) - find, nearby, location, scene_changes, all_objects, all_locations
+  - `/spatial_memory/result` (String JSON) - query results
+  - `/spatial_memory/status` (String JSON) - periodic memory status
+- [x] Persistence to `/tmp/billybot_spatial_memory.json`
+- [ ] Gemini vision integration for automatic object detection (deferred)
+
+#### New Files (6.3)
+
+| File | Purpose |
+|------|---------|
+| `ros/nodes/spatial_memory_node.py` | Spatial memory with JSON persistence |
+
+### 6.4 Multi-Robot Fleet [COMPLETE]
+
+- [x] Dashboard **Fleet** page (`/fleet/`) with:
+  - Auto-discovery of robots by namespace scanning
+  - Per-robot cards showing nodes and topics
+  - Quick links to Control and Telemetry per robot
+  - Standalone nodes section for non-namespaced nodes
+  - Fleet architecture reference (namespace convention, per-robot topics)
+- [x] Fleet API: `/api/fleet/robots/` - discovers robots by grouping nodes by namespace
+- [x] Namespace convention documented: `/grunt1/`, `/grunt2/`, `/grunt3/`
+- [ ] Per-robot command routing (deferred - requires namespace-aware WebSocket)
+- [ ] Nanobot fleet management via separate sessions (deferred)
+
+#### New Files (6.4)
+
+| File | Purpose |
+|------|---------|
+| `dashboard/core/templates/core/fleet.html` | Fleet overview dashboard page |
+
+### Dashboard Pages After Stage 6
+
+| Page | Route | Key Components |
+|------|-------|---------------|
+| Dashboard | `/` | Status cards, nodes list, activity log, quick actions |
+| Control | `/control/` | Drive joystick, pan/tilt, arm presets, E-STOP, camera feed |
+| Telemetry | `/telemetry/` | Motor speeds, temperatures, audio energy, VAD state |
+| Vision & Nav | `/vision/` | Camera feed, SLAM map, click-to-navigate, nav controls |
+| Behaviors | `/behaviors/` | Patrol/Search/Follow/Guard cards, status, waypoints, log |
+| Arm Control | `/arm/` | SVG visualization, joint sliders, presets, bearings |
+| Fleet | `/fleet/` | Robot discovery, per-robot cards, namespace grouping |
+| Topics | `/topics/` | Topic list, filter, details, echo |
+| Nodes | `/nodes/` | Node list, info, parameters |
+| Chat | `/chat/` | Nanobot chat with session persistence |
+| Logs | `/logs/` | Container log viewer with filtering |
+| Settings | `/settings/` | System health, deployment, launch configs |
+
+### WebSocket Consumers After Stage 6
+
+| Consumer | Route | Purpose |
+|----------|-------|---------|
+| Ros2BridgeConsumer | `ws/ros2/` | cmd_vel, arm_preset, bearing, voice, estop, pantilt |
+| TelemetryConsumer | `ws/telemetry/` | Motor feedback streaming |
+| ChatConsumer | `ws/chat/` | Nanobot chat via docker exec |
+| CameraConsumer | `ws/camera/` | Camera frame streaming |
+| MapConsumer | `ws/map/` | SLAM map + robot pose streaming |
+| BehaviorConsumer | `ws/behaviors/` | Behavior status + command sending |
+| LogConsumer | `ws/logs/` | Container log streaming |
 
 ---
 

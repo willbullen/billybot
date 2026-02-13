@@ -118,6 +118,18 @@ install(PROGRAMS
 )
 
 install(PROGRAMS
+  nodes/behavior_manager_node.py
+  DESTINATION lib/${PROJECT_NAME}
+  RENAME behavior_manager_node
+)
+
+install(PROGRAMS
+  nodes/spatial_memory_node.py
+  DESTINATION lib/${PROJECT_NAME}
+  RENAME spatial_memory_node
+)
+
+install(PROGRAMS
   tests/test_command_processor.py
   DESTINATION lib/${PROJECT_NAME}
   RENAME test_command_processor

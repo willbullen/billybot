@@ -54,6 +54,18 @@ def vision(request):
     return render(request, "core/vision.html")
 
 
+def behaviors(request):
+    return render(request, "core/behaviors.html")
+
+
+def arm(request):
+    return render(request, "core/arm.html")
+
+
+def fleet(request):
+    return render(request, "core/fleet.html")
+
+
 def settings_view(request):
     return render(request, "core/settings.html", {
         "ros_domain_id": os.environ.get("ROS_DOMAIN_ID", "0"),
@@ -526,6 +538,63 @@ def api_nav_cancel(request):
     return JsonResponse({"result": output})
 
 
+@csrf_exempt
+@require_POST
+def api_map_save(request):
+    """Save the current SLAM map to a file."""
+    try:
+        data = json.loads(request.body)
+    except json.JSONDecodeError:
+        data = {}
+
+    name = data.get("name", "billybot_map")
+    # Sanitize name
+    safe_name = "".join(c for c in name if c.isalnum() or c in "-_")
+    if not safe_name:
+        safe_name = "billybot_map"
+
+    output = _ros2_exec(
+        f'ros2 service call /slam_toolbox/save_map slam_toolbox/srv/SaveMap '
+        f'"{{name: {{data: /tmp/{safe_name}}}}}"',
+        timeout=15,
+    )
+    return JsonResponse({"result": output, "path": f"/tmp/{safe_name}"})
+
+
+@csrf_exempt
+@require_POST
+def api_map_load(request):
+    """Load a saved map file for localization mode."""
+    try:
+        data = json.loads(request.body)
+    except json.JSONDecodeError:
+        return JsonResponse({"error": "Invalid JSON"}, status=400)
+
+    map_file = data.get("map_file", "/tmp/billybot_map")
+    safe_file = "".join(c for c in map_file if c.isalnum() or c in "-_/.")
+    output = _ros2_exec(
+        f'ros2 service call /slam_toolbox/deserialize_map slam_toolbox/srv/DeserializePoseGraph '
+        f'"{{filename: {{data: {safe_file}}}, match_type: 1}}"',
+        timeout=15,
+    )
+    return JsonResponse({"result": output})
+
+
+@require_GET
+def api_map_list(request):
+    """List saved map files in /tmp."""
+    output = _ros2_exec("ls -1 /tmp/*.pgm /tmp/*.yaml 2>/dev/null || echo ''", timeout=5)
+    files = [f.strip() for f in output.split("\n") if f.strip() and not f.startswith("Error")]
+    # Group by base name (pgm+yaml pairs)
+    maps = {}
+    for f in files:
+        base = f.rsplit(".", 1)[0]
+        if base not in maps:
+            maps[base] = []
+        maps[base].append(f)
+    return JsonResponse({"maps": [{"name": k, "files": v} for k, v in maps.items()]})
+
+
 @require_GET
 def api_camera_snapshot(request):
     """Get a single camera frame as base64 JPEG (for non-WebSocket clients)."""
@@ -613,3 +682,48 @@ def api_system_health(request):
         health["overall"] = "unhealthy"
 
     return JsonResponse(health)
+
+
+# ---------------------------------------------------------------------------
+# API views: Fleet
+# ---------------------------------------------------------------------------
+
+
+@require_GET
+def api_fleet_robots(request):
+    """Discover robots in the ROS 2 network by scanning for namespaced nodes."""
+    nodes_output = _ros2_exec("ros2 node list 2>/dev/null", timeout=5)
+    nodes_list = [n.strip() for n in nodes_output.split("\n") if n.strip().startswith("/")]
+
+    # Group nodes by namespace (e.g., /grunt1/ddsm_driver -> grunt1)
+    robots = {}
+    standalone_nodes = []
+
+    for node in nodes_list:
+        parts = node.strip("/").split("/")
+        if len(parts) >= 2:
+            ns = parts[0]
+            node_name = "/".join(parts[1:])
+            if ns not in robots:
+                robots[ns] = {"namespace": ns, "nodes": [], "topics": []}
+            robots[ns]["nodes"].append(node_name)
+        else:
+            standalone_nodes.append(parts[0])
+
+    # Get topics per namespace
+    topics_output = _ros2_exec("ros2 topic list 2>/dev/null", timeout=5)
+    topics_list = [t.strip() for t in topics_output.split("\n") if t.strip().startswith("/")]
+
+    for topic in topics_list:
+        parts = topic.strip("/").split("/")
+        if len(parts) >= 2:
+            ns = parts[0]
+            if ns in robots:
+                robots[ns]["topics"].append("/" + "/".join(parts))
+
+    return JsonResponse({
+        "robots": list(robots.values()),
+        "standalone_nodes": standalone_nodes,
+        "total_nodes": len(nodes_list),
+        "total_topics": len(topics_list),
+    })

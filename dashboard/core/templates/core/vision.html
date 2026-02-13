@@ -88,7 +88,9 @@
       <div class="flex items-center justify-between mb-4">
         <h2 class="hud-section-title mb-0">Navigation Map</h2>
         <div class="flex items-center gap-2">
+          <span class="w-2 h-2 rounded-full" :class="mapWsConnected ? 'bg-emerald-500' : 'bg-slate-600'"></span>
           <button @click="saveMap()" class="hud-btn hud-btn-secondary text-xs py-1">Save Map</button>
+          <button @click="showMapManager = !showMapManager" class="hud-btn hud-btn-secondary text-xs py-1">Maps</button>
         </div>
       </div>
       <div class="map-canvas bg-slate-800/60 rounded-lg border border-cyan-500/20 relative overflow-hidden" style="aspect-ratio: 4/3;"
@@ -125,6 +127,33 @@
           Click to set nav goal
         </div>
       </div>
+    </div>
+  </div>
+
+  <!-- Map Manager Overlay -->
+  <div x-show="showMapManager" x-transition class="hud-panel rounded-xl p-5 mt-6">
+    <div class="flex items-center justify-between mb-4">
+      <h2 class="hud-section-title mb-0">Saved Maps</h2>
+      <button @click="showMapManager = false" class="text-slate-500 hover:text-slate-300">&times;</button>
+    </div>
+    <div class="space-y-2">
+      <template x-if="savedMaps.length === 0">
+        <p class="text-xs text-slate-500">No saved maps found. Use "Save Map" to save the current SLAM map.</p>
+      </template>
+      <template x-for="m in savedMaps" :key="m.name">
+        <div class="flex items-center justify-between bg-slate-800/60 rounded-lg px-3 py-2">
+          <span class="text-sm text-slate-300 font-mono" x-text="m.name"></span>
+          <div class="flex items-center gap-2">
+            <span class="text-xs text-slate-500" x-text="m.files.length + ' files'"></span>
+            <button @click="loadMap(m.name)" class="hud-btn hud-btn-primary text-xs py-0.5 px-2">Load</button>
+          </div>
+        </div>
+      </template>
+    </div>
+    <div class="mt-4 pt-3 border-t border-slate-700/50 flex gap-2">
+      <input type="text" x-model="saveMapName" placeholder="Map name" class="hud-input text-xs py-1 flex-1">
+      <button @click="saveMap()" class="hud-btn hud-btn-primary text-xs">Save Current</button>
+      <button @click="refreshMaps()" class="hud-btn hud-btn-secondary text-xs">Refresh</button>
     </div>
   </div>
 
@@ -223,6 +252,11 @@ function visionApp() {
     cameraFps: '5',
     frameCount: 0,
 
+    // Map WebSocket
+    mapWs: null,
+    mapWsConnected: false,
+    mapInfo: null,
+
     // Nav status
     cameraActive: false,
     depthActive: false,
@@ -239,6 +273,11 @@ function visionApp() {
     robotYaw: 0,
     goalMarker: null,
 
+    // Map manager
+    showMapManager: false,
+    savedMaps: [],
+    saveMapName: 'billybot_map',
+
     // Nav goal
     goalX: 0,
     goalY: 0,
@@ -246,8 +285,9 @@ function visionApp() {
 
     init() {
       this.connectCameraWs();
+      this.connectMapWs();
       this.refreshStatus();
-      // Poll status every 10s
+      this.refreshMaps();
       setInterval(() => this.refreshStatus(), 10000);
     },
 
@@ -281,6 +321,70 @@ function visionApp() {
       }
     },
 
+    connectMapWs() {
+      const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
+      this.mapWs = new WebSocket(`${proto}//${location.host}/ws/map/`);
+      this.mapWs.onopen = () => { this.mapWsConnected = true; };
+      this.mapWs.onmessage = (e) => {
+        try {
+          const data = JSON.parse(e.data);
+          if (data.type === 'map_update') {
+            if (data.map) {
+              this.mapImage = data.map;
+              this.mapInfo = data.map_info || null;
+            }
+            if (data.pose && this.mapInfo) {
+              this.robotPose = data.pose;
+              this.updateRobotPosition();
+            }
+          }
+        } catch(err) {}
+      };
+      this.mapWs.onclose = () => {
+        this.mapWsConnected = false;
+        setTimeout(() => this.connectMapWs(), 5000);
+      };
+      this.mapWs.onerror = () => { this.mapWsConnected = false; };
+    },
+
+    updateRobotPosition() {
+      if (!this.robotPose || !this.mapInfo) return;
+      const info = this.mapInfo;
+      // Convert world coords to pixel coords on the map image
+      const px = (this.robotPose.x - info.ox) / info.res;
+      const py = info.h - (this.robotPose.y - info.oy) / info.res;
+      // Scale to the rendered element size (aspect-ratio 4:3 container)
+      const el = this.$el.querySelector('.map-canvas');
+      if (!el) return;
+      const scaleX = el.clientWidth / info.w;
+      const scaleY = el.clientHeight / info.h;
+      this.robotScreenX = px * scaleX;
+      this.robotScreenY = py * scaleY;
+      this.robotYaw = -this.robotPose.yaw;  // Flip for screen coords
+    },
+
+    async refreshMaps() {
+      try {
+        const resp = await fetch('/api/map/list/');
+        const data = await resp.json();
+        this.savedMaps = data.maps || [];
+      } catch(e) {}
+    },
+
+    async loadMap(name) {
+      try {
+        const resp = await fetch('/api/map/load/', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ map_file: name }),
+        });
+        const data = await resp.json();
+        alert(data.result || 'Map load requested');
+      } catch(e) {
+        alert('Failed to load map');
+      }
+    },
+
     async refreshStatus() {
       try {
         const resp = await fetch('/api/nav/status/');
@@ -294,20 +398,25 @@ function visionApp() {
     },
 
     handleMapClick(event) {
-      // Convert click position to map coordinates (placeholder: just show marker)
       const rect = event.currentTarget.getBoundingClientRect();
       const x = event.clientX - rect.left;
       const y = event.clientY - rect.top;
 
-      // Show goal marker
       this.goalMarker = { x, y };
 
-      // Convert pixel to approximate world coordinates
-      // This is a placeholder - real implementation needs map metadata
-      const mapWidth = rect.width;
-      const mapHeight = rect.height;
-      this.goalX = ((x / mapWidth) - 0.5) * 10;  // -5 to 5 meters
-      this.goalY = ((0.5 - y / mapHeight)) * 10;  // -5 to 5 meters
+      if (this.mapInfo) {
+        // Use real map metadata to convert pixel to world coords
+        const scaleX = rect.width / this.mapInfo.w;
+        const scaleY = rect.height / this.mapInfo.h;
+        const px = x / scaleX;
+        const py = y / scaleY;
+        this.goalX = (px * this.mapInfo.res + this.mapInfo.ox).toFixed(2);
+        this.goalY = ((this.mapInfo.h - py) * this.mapInfo.res + this.mapInfo.oy).toFixed(2);
+      } else {
+        // Fallback: approximate -5 to 5 meter range
+        this.goalX = (((x / rect.width) - 0.5) * 10).toFixed(2);
+        this.goalY = (((0.5 - y / rect.height)) * 10).toFixed(2);
+      }
       this.goalYaw = 0;
     },
 
@@ -345,17 +454,15 @@ function visionApp() {
     },
 
     async saveMap() {
-      // Trigger SLAM map save via ROS 2
       try {
-        const resp = await fetch('/api/ros2/exec/', {
+        const resp = await fetch('/api/map/save/', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            command: 'ros2 service call /slam_toolbox/save_map slam_toolbox/srv/SaveMap "{name: {data: /tmp/billybot_map}}"',
-          }),
+          body: JSON.stringify({ name: this.saveMapName || 'billybot_map' }),
         });
         const data = await resp.json();
-        alert(data.output || 'Map save requested');
+        alert(data.result || `Map saved to ${data.path}`);
+        this.refreshMaps();
       } catch(e) {
         alert('Failed to save map');
       }

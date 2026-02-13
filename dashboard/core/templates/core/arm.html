@@ -1,0 +1,248 @@
+{% extends "core/base.html" %}
+{% block title %}Arm Control{% endblock %}
+{% block page_title %}Arm & Manipulation{% endblock %}
+
+{% block extra_head %}
+<style>
+  .hud-panel { background: rgba(30, 41, 59, 0.5); backdrop-filter: blur(12px); border: 1px solid rgba(6, 182, 212, 0.2); }
+  .hud-panel:hover { border-color: rgba(6, 182, 212, 0.35); }
+  .joint-slider { -webkit-appearance: none; appearance: none; width: 100%; height: 6px; border-radius: 3px; background: linear-gradient(to right, #164e63, #06b6d4, #164e63); outline: none; }
+  .joint-slider::-webkit-slider-thumb { -webkit-appearance: none; appearance: none; width: 18px; height: 18px; border-radius: 50%; background: #06b6d4; cursor: pointer; border: 2px solid #0e7490; box-shadow: 0 0 8px rgba(6, 182, 212, 0.4); }
+  .preset-btn { transition: all 0.2s; }
+  .preset-btn:hover { transform: scale(1.05); }
+  .preset-btn.active { border-color: rgba(6, 182, 212, 0.6); box-shadow: 0 0 12px rgba(6, 182, 212, 0.2); }
+  .arm-viz { position: relative; background: repeating-linear-gradient(0deg, rgba(6,182,212,0.02) 0px, transparent 1px, transparent 30px), repeating-linear-gradient(90deg, rgba(6,182,212,0.02) 0px, transparent 1px, transparent 30px); }
+</style>
+{% endblock %}
+
+{% block content %}
+<div x-data="armApp()" x-init="init()">
+
+  <!-- Status bar -->
+  <div class="flex items-center justify-between mb-6 flex-wrap gap-3">
+    <div class="flex items-center gap-4 flex-wrap">
+      <div class="flex items-center gap-2 text-sm">
+        <span class="w-2.5 h-2.5 rounded-full" :class="connected ? 'bg-emerald-500 pulse-dot' : 'bg-slate-600'"></span>
+        <span class="text-slate-400" x-text="connected ? 'Arm driver connected' : 'Disconnected'"></span>
+      </div>
+      <div class="flex items-center gap-2 text-sm">
+        <span class="text-slate-500">Preset:</span>
+        <span class="font-mono text-cyan-300" x-text="currentPreset || 'none'"></span>
+      </div>
+    </div>
+    <button @click="sendPreset('tenhut')" class="hud-btn hud-btn-warning text-xs">Home Position</button>
+  </div>
+
+  <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+
+    <!-- Arm Visualization -->
+    <div class="lg:col-span-2 hud-panel rounded-xl p-5">
+      <h2 class="hud-section-title">Arm Visualization</h2>
+      <div class="arm-viz rounded-lg border border-cyan-500/20 bg-slate-800/40 flex items-center justify-center" style="height: 320px;">
+        <svg viewBox="0 0 400 300" class="w-full h-full" style="max-width: 500px;">
+          <!-- Base -->
+          <rect x="160" y="240" width="80" height="40" rx="4" fill="none" stroke="#334155" stroke-width="2"/>
+          <text x="200" y="265" text-anchor="middle" fill="#475569" font-size="10" font-family="monospace">BASE</text>
+
+          <!-- Base platform -->
+          <rect x="175" y="220" width="50" height="20" rx="3" fill="none" stroke="#475569" stroke-width="1.5"/>
+
+          <!-- Pan joint (rotates around base) -->
+          <g :style="`transform-origin: 200px 220px; transform: rotate(${panAngleDeg}deg);`">
+            <!-- Pan indicator arc -->
+            <circle cx="200" cy="220" r="15" fill="none" stroke="#06b6d4" stroke-width="1" stroke-dasharray="2 2" opacity="0.3"/>
+
+            <!-- Upper arm -->
+            <line x1="200" y1="220" x2="200" y2="140" stroke="#06b6d4" stroke-width="3" stroke-linecap="round"/>
+
+            <!-- Tilt joint -->
+            <g :style="`transform-origin: 200px 140px; transform: rotate(${-tiltAngleDeg}deg);`">
+              <!-- Tilt joint circle -->
+              <circle cx="200" cy="140" r="8" fill="none" stroke="#0ea5e9" stroke-width="2"/>
+              <circle cx="200" cy="140" r="3" fill="#06b6d4"/>
+
+              <!-- Camera head -->
+              <line x1="200" y1="140" x2="200" y2="80" stroke="#0ea5e9" stroke-width="3" stroke-linecap="round"/>
+
+              <!-- Camera -->
+              <rect x="185" y="65" width="30" height="20" rx="4" fill="none" stroke="#22d3ee" stroke-width="2"/>
+              <circle cx="200" cy="75" r="5" fill="none" stroke="#67e8f9" stroke-width="1.5"/>
+              <circle cx="200" cy="75" r="2" fill="#06b6d4"/>
+
+              <!-- Camera FOV lines -->
+              <line x1="185" y1="65" x2="170" y2="40" stroke="#22d3ee" stroke-width="0.5" stroke-dasharray="3 3" opacity="0.3"/>
+              <line x1="215" y1="65" x2="230" y2="40" stroke="#22d3ee" stroke-width="0.5" stroke-dasharray="3 3" opacity="0.3"/>
+            </g>
+          </g>
+
+          <!-- Pan joint circle -->
+          <circle cx="200" cy="220" r="8" fill="none" stroke="#06b6d4" stroke-width="2"/>
+          <circle cx="200" cy="220" r="3" fill="#06b6d4"/>
+
+          <!-- Angle readouts -->
+          <text x="20" y="30" fill="#06b6d4" font-size="11" font-family="monospace" opacity="0.8">
+            PAN: <tspan x-text="panAngleDeg.toFixed(1) + '\u00b0'"></tspan>
+          </text>
+          <text x="20" y="48" fill="#0ea5e9" font-size="11" font-family="monospace" opacity="0.8">
+            TILT: <tspan x-text="tiltAngleDeg.toFixed(1) + '\u00b0'"></tspan>
+          </text>
+
+          <!-- Bearing compass -->
+          <g transform="translate(350, 270)">
+            <circle r="25" fill="none" stroke="#334155" stroke-width="1"/>
+            <text y="-30" text-anchor="middle" fill="#475569" font-size="8" font-family="monospace">FWD</text>
+            <text y="38" text-anchor="middle" fill="#475569" font-size="8" font-family="monospace">BACK</text>
+            <text x="-32" y="4" text-anchor="middle" fill="#475569" font-size="8" font-family="monospace">L</text>
+            <text x="32" y="4" text-anchor="middle" fill="#475569" font-size="8" font-family="monospace">R</text>
+            <!-- Direction indicator -->
+            <line x1="0" y1="0"
+                  :x2="Math.sin(panAngleDeg * Math.PI / 180) * 20"
+                  :y2="-Math.cos(panAngleDeg * Math.PI / 180) * 20"
+                  stroke="#06b6d4" stroke-width="2" stroke-linecap="round"/>
+            <circle r="3" fill="#06b6d4"/>
+          </g>
+        </svg>
+      </div>
+    </div>
+
+    <!-- Joint Controls -->
+    <div class="space-y-6">
+      <!-- Pan Joint -->
+      <div class="hud-panel rounded-xl p-5">
+        <h2 class="hud-section-title">Pan Joint</h2>
+        <div class="space-y-3">
+          <div class="flex items-center justify-between">
+            <span class="text-sm text-slate-400">Angle</span>
+            <span class="text-sm font-mono text-cyan-300" x-text="panAngleDeg.toFixed(1) + '\u00b0'"></span>
+          </div>
+          <input type="range" x-model="panValue" min="0" max="4095" step="1" class="joint-slider" @input="sendJointPosition()">
+          <div class="flex justify-between text-xs text-slate-600 font-mono">
+            <span>-180&deg;</span><span>0&deg;</span><span>180&deg;</span>
+          </div>
+          <div class="grid grid-cols-5 gap-1">
+            <button @click="panValue = 3072; sendJointPosition()" class="hud-btn hud-btn-secondary text-xs py-1 px-1">L</button>
+            <button @click="panValue = 2560; sendJointPosition()" class="hud-btn hud-btn-secondary text-xs py-1 px-1">L-ish</button>
+            <button @click="panValue = 2048; sendJointPosition()" class="hud-btn hud-btn-primary text-xs py-1 px-1">FWD</button>
+            <button @click="panValue = 1536; sendJointPosition()" class="hud-btn hud-btn-secondary text-xs py-1 px-1">R-ish</button>
+            <button @click="panValue = 1024; sendJointPosition()" class="hud-btn hud-btn-secondary text-xs py-1 px-1">R</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Tilt Joint -->
+      <div class="hud-panel rounded-xl p-5">
+        <h2 class="hud-section-title">Tilt Joint</h2>
+        <div class="space-y-3">
+          <div class="flex items-center justify-between">
+            <span class="text-sm text-slate-400">Angle</span>
+            <span class="text-sm font-mono text-cyan-300" x-text="tiltAngleDeg.toFixed(1) + '\u00b0'"></span>
+          </div>
+          <input type="range" x-model="tiltValue" min="0" max="4095" step="1" class="joint-slider" @input="sendJointPosition()">
+          <div class="flex justify-between text-xs text-slate-600 font-mono">
+            <span>-180&deg;</span><span>0&deg;</span><span>180&deg;</span>
+          </div>
+          <div class="grid grid-cols-4 gap-1">
+            <button @click="tiltValue = 512; sendJointPosition()" class="hud-btn hud-btn-secondary text-xs py-1 px-1">Down</button>
+            <button @click="tiltValue = 1536; sendJointPosition()" class="hud-btn hud-btn-secondary text-xs py-1 px-1">Mid</button>
+            <button @click="tiltValue = 2048; sendJointPosition()" class="hud-btn hud-btn-primary text-xs py-1 px-1">Level</button>
+            <button @click="tiltValue = 3072; sendJointPosition()" class="hud-btn hud-btn-secondary text-xs py-1 px-1">Up</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Presets -->
+  <div class="mt-6 hud-panel rounded-xl p-5">
+    <h2 class="hud-section-title">Arm Presets</h2>
+    <div class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-3">
+      <template x-for="preset in presets" :key="preset.name">
+        <button @click="sendPreset(preset.name)"
+                class="preset-btn hud-panel rounded-lg p-3 text-center border"
+                :class="currentPreset === preset.name ? 'active border-cyan-500/50' : 'border-slate-700/50'">
+          <div class="text-2xl mb-1" x-text="preset.icon"></div>
+          <div class="text-xs font-medium text-white" x-text="preset.label"></div>
+          <div class="text-xs text-slate-500 mt-0.5" x-text="preset.desc"></div>
+        </button>
+      </template>
+    </div>
+  </div>
+
+  <!-- Bearing presets (for compound commands) -->
+  <div class="mt-6 hud-panel rounded-xl p-5">
+    <h2 class="hud-section-title">Bearing Presets</h2>
+    <div class="flex flex-wrap gap-2">
+      <template x-for="b in bearings" :key="b">
+        <button @click="sendPreset(currentPreset ? currentPreset + '@' + b : 'pan@' + b)"
+                class="hud-btn hud-btn-secondary text-xs" x-text="b">
+        </button>
+      </template>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+function armApp() {
+  return {
+    ws: null,
+    connected: false,
+    currentPreset: '',
+    panValue: 2048,
+    tiltValue: 2048,
+
+    presets: [
+      { name: 'bumper', label: 'Bumper', icon: '\u{1F6E1}', desc: 'Down guard' },
+      { name: 'tenhut', label: 'Ten-Hut', icon: '\u{1F9CD}', desc: 'Home center' },
+      { name: 'lookup', label: 'Look Up', icon: '\u{1F440}', desc: 'Camera up' },
+      { name: 'lookout', label: 'Look Out', icon: '\u{1F50D}', desc: 'Forward scan' },
+      { name: 'reach', label: 'Reach', icon: '\u{1F4AA}', desc: 'Extended' },
+      { name: 'pan', label: 'Pan', icon: '\u{1F504}', desc: 'Pan control' },
+    ],
+
+    bearings: ['back-left', 'full-left', 'left', 'leftish', 'forward', 'rightish', 'right', 'full-right', 'back-right', 'back'],
+
+    get panAngleDeg() {
+      return ((this.panValue - 2048) / 4095) * 360;
+    },
+    get tiltAngleDeg() {
+      return ((this.tiltValue - 2048) / 4095) * 360;
+    },
+
+    init() {
+      this.connectWs();
+    },
+
+    connectWs() {
+      const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
+      this.ws = new WebSocket(`${proto}//${location.host}/ws/ros2/`);
+      this.ws.onopen = () => { this.connected = true; };
+      this.ws.onclose = () => {
+        this.connected = false;
+        setTimeout(() => this.connectWs(), 5000);
+      };
+      this.ws.onerror = () => { this.connected = false; };
+    },
+
+    sendPreset(preset) {
+      if (!preset) return;
+      this.currentPreset = preset.split('@')[0];
+      if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+        this.ws.send(JSON.stringify({ type: 'arm_preset', preset: preset }));
+      }
+    },
+
+    sendJointPosition() {
+      if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+        this.ws.send(JSON.stringify({
+          type: 'pantilt',
+          pan: (this.panValue - 2048) / 2048 * Math.PI,
+          tilt: (this.tiltValue - 2048) / 2048 * Math.PI,
+        }));
+      }
+    },
+  }
+}
+</script>
+{% endblock %}

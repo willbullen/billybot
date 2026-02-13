@@ -43,6 +43,18 @@ class URLTests(TestCase):
         url = reverse("settings")
         self.assertEqual(url, "/settings/")
 
+    def test_behaviors_url(self):
+        url = reverse("behaviors")
+        self.assertEqual(url, "/behaviors/")
+
+    def test_arm_url(self):
+        url = reverse("arm")
+        self.assertEqual(url, "/arm/")
+
+    def test_fleet_url(self):
+        url = reverse("fleet")
+        self.assertEqual(url, "/fleet/")
+
 
 class PageViewTests(TestCase):
     """Verify all page views render successfully."""
@@ -84,6 +96,18 @@ class PageViewTests(TestCase):
         response = self.client.get("/settings/")
         self.assertEqual(response.status_code, 200)
 
+    def test_behaviors_page(self):
+        response = self.client.get("/behaviors/")
+        self.assertEqual(response.status_code, 200)
+
+    def test_arm_page(self):
+        response = self.client.get("/arm/")
+        self.assertEqual(response.status_code, 200)
+
+    def test_fleet_page(self):
+        response = self.client.get("/fleet/")
+        self.assertEqual(response.status_code, 200)
+
 
 class APIRouteTests(TestCase):
     """Verify API endpoints exist and return JSON."""
@@ -117,6 +141,14 @@ class APIRouteTests(TestCase):
         response = self.client.get("/api/ros2/node-info/")
         self.assertEqual(response.status_code, 400)
 
+    def test_map_list_api(self):
+        response = self.client.get("/api/map/list/")
+        self.assertEqual(response.status_code, 200)
+
+    def test_fleet_robots_api(self):
+        response = self.client.get("/api/fleet/robots/")
+        self.assertEqual(response.status_code, 200)
+
     def test_post_endpoints_reject_get(self):
         """POST-only endpoints should reject GET requests."""
         post_urls = [
@@ -125,6 +157,8 @@ class APIRouteTests(TestCase):
             "/api/docker/restart/",
             "/api/nav/goal/",
             "/api/nav/cancel/",
+            "/api/map/save/",
+            "/api/map/load/",
         ]
         for url in post_urls:
             response = self.client.get(url)

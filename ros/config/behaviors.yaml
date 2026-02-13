@@ -1,0 +1,10 @@
+# Behavior Manager parameters
+behavior_manager:
+  ros__parameters:
+    patrol_loop: true
+    patrol_speed: 0.3
+    search_radius: 3.0
+    search_step: 1.0
+    follow_distance: 1.5
+    guard_alert_threshold: 0.5
+    goal_tolerance: 0.3
