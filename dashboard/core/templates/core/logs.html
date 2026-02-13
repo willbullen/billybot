@@ -2,6 +2,98 @@
 {% block title %}Logs{% endblock %}
 {% block page_title %}Logs{% endblock %}
 
+{% block help_modal %}
+<div id="helpModal" class="hidden fixed inset-0 z-50 hud-modal-backdrop flex items-start justify-center pt-20 px-4" onclick="if(event.target===this)this.classList.add('hidden')">
+  <div class="hud-modal rounded-2xl max-w-2xl w-full max-h-[75vh] overflow-y-auto p-8">
+    <div class="flex items-center justify-between mb-6">
+      <h2 class="text-lg font-semibold text-white tracking-tight">Logs Viewer Documentation</h2>
+      <button onclick="document.getElementById('helpModal').classList.add('hidden')" class="text-slate-500 hover:text-white transition-colors text-xl leading-none">&times;</button>
+    </div>
+
+    <div class="doc-section">
+      <h3>Overview</h3>
+      <p>The Logs Viewer provides real-time access to Docker container stdout/stderr streams. Logs are fetched via <code>/api/docker/logs/</code> which runs <code>docker logs --tail &lt;N&gt;</code> on the selected container.</p>
+      <p>When auto-scroll is enabled, logs refresh every <code>5 seconds</code> automatically.</p>
+    </div>
+
+    <div class="doc-section">
+      <h3>Container Selection</h3>
+      <p>Select which container&rsquo;s logs to view. Each container generates different log output:</p>
+      <dl class="doc-grid">
+        <dt>billybot-ros2</dt>
+        <dd>ROS 2 container logs. Includes all node output: motor driver, audio pipeline, command processor, SLAM, Nav2, behavior manager. Most verbose &mdash; look here for hardware errors and node lifecycle events.</dd>
+        <dt>billybot-nanobot</dt>
+        <dd>Nanobot AI gateway logs. Shows agent requests, tool invocations, model API calls, cron job execution, and memory operations.</dd>
+        <dt>billybot-dashboard</dt>
+        <dd>Django dashboard logs. Shows HTTP requests, WebSocket connections, API calls, and any server-side errors.</dd>
+      </dl>
+    </div>
+
+    <div class="doc-section">
+      <h3>Controls</h3>
+      <dl class="doc-grid">
+        <dt>Line Count</dt>
+        <dd>Number of trailing log lines to fetch: 50, 100, 200, or 500. Higher counts take longer but show more history. Maps to <code>docker logs --tail N</code>.</dd>
+        <dt>Filter</dt>
+        <dd>Case-insensitive substring filter applied client-side. Use to isolate specific nodes, error levels, or keywords. Examples: <code>ERROR</code>, <code>ddsm</code>, <code>nav2</code>.</dd>
+        <dt>Auto-scroll</dt>
+        <dd>When enabled, logs auto-refresh every 5 seconds and the view scrolls to the bottom. Disable to freeze the view while investigating an issue.</dd>
+        <dt>Refresh</dt>
+        <dd>Manual refresh button. Fetches the latest N lines from the selected container.</dd>
+      </dl>
+    </div>
+
+    <div class="doc-section">
+      <h3>Log Level Coloring</h3>
+      <p>Log lines are automatically color-coded by severity level for quick scanning:</p>
+      <dl class="doc-grid">
+        <dt class="text-red-400">ERROR / error</dt>
+        <dd>Red text. Critical failures &mdash; node crashes, hardware communication failures, missing dependencies.</dd>
+        <dt class="text-amber-400">WARN / warn</dt>
+        <dd>Amber text. Non-fatal issues &mdash; timeouts, degraded performance, missing optional components.</dd>
+        <dt class="text-cyan-300/70">INFO / info</dt>
+        <dd>Cyan text. Normal operational messages &mdash; node startup, topic subscriptions, configuration loaded.</dd>
+        <dt class="text-slate-400">Other</dt>
+        <dd>Default grey. Debug output, raw data, timestamps without level prefix.</dd>
+      </dl>
+    </div>
+
+    <div class="doc-section">
+      <h3>Common Log Patterns</h3>
+      <dl class="doc-grid">
+        <dt>Node startup</dt>
+        <dd><code>[INFO] [ddsm_driver_node]: Node initialized</code> &mdash; Confirms a node has started and is ready.</dd>
+        <dt>Motor timeout</dt>
+        <dd><code>[WARN] [ddsm_driver_node]: Motor 1 response timeout</code> &mdash; DDSM210 didn&rsquo;t respond within expected window. Check USB connection.</dd>
+        <dt>Nav2 goal</dt>
+        <dd><code>[INFO] [bt_navigator]: Navigating to goal...</code> &mdash; Nav2 accepted a navigation goal.</dd>
+        <dt>SLAM update</dt>
+        <dd><code>[INFO] [slam_toolbox]: Updated map</code> &mdash; SLAM toolbox updated the occupancy grid.</dd>
+        <dt>Audio VAD</dt>
+        <dd><code>[INFO] [audio_pipeline_node]: VAD: speech_start</code> &mdash; Voice activity detection triggered.</dd>
+      </dl>
+    </div>
+
+    <div class="doc-section">
+      <h3>Troubleshooting Tips</h3>
+      <div class="info-box">
+        <p><strong>No logs appearing?</strong> Ensure the container is running. Check the Settings page for container status.</p>
+        <p class="mt-2"><strong>Missing recent output?</strong> Docker log rotation may have cleared old entries. Increase line count to 500.</p>
+        <p class="mt-2"><strong>Too much noise?</strong> Use the filter to isolate relevant output. Try filtering by node name or <code>ERROR</code>.</p>
+      </div>
+    </div>
+
+    <div class="doc-section">
+      <h3>API Endpoint</h3>
+      <dl class="doc-grid">
+        <dt>GET /api/docker/logs/</dt>
+        <dd>Fetch container logs. Params: <code>container</code> (container name), <code>lines</code> (number of trailing lines).</dd>
+      </dl>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
 {% block content %}
 <div x-data="logsApp()" x-init="init()">
 

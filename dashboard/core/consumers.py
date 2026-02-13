@@ -309,6 +309,217 @@ class CameraConsumer(AsyncWebsocketConsumer):
             return None
 
 
+class BehaviorConsumer(AsyncWebsocketConsumer):
+    """Streams behavior_status from ROS 2 behavior_manager_node to the browser."""
+
+    async def connect(self):
+        await self.accept()
+        self._running = True
+        self._container = getattr(settings, "ROS2_CONTAINER_NAME", "billybot-ros2")
+        asyncio.ensure_future(self._behavior_loop())
+
+    async def disconnect(self, close_code):
+        self._running = False
+
+    async def receive(self, text_data=None, bytes_data=None):
+        """Handle behavior commands from browser."""
+        if not text_data:
+            return
+        try:
+            data = json.loads(text_data)
+        except json.JSONDecodeError:
+            return
+
+        cmd = data.get("command", "")
+        if cmd:
+            # Publish behavior command to /grunt1/behavior_command
+            safe_cmd = cmd.replace("'", "")
+            full_cmd = (
+                f"docker exec {self._container} bash -c "
+                f"'source /opt/ros/humble/setup.bash && "
+                f"source /ros2_ws/install/setup.bash 2>/dev/null; "
+                f"ros2 topic pub --once /grunt1/behavior_command std_msgs/String "
+                f"\"{{data: \\\"{safe_cmd}\\\"}}\"'"
+            )
+            try:
+                proc = await asyncio.create_subprocess_shell(
+                    full_cmd,
+                    stdout=asyncio.subprocess.PIPE,
+                    stderr=asyncio.subprocess.PIPE,
+                )
+                await asyncio.wait_for(proc.communicate(), timeout=5)
+            except (asyncio.TimeoutError, Exception):
+                pass
+
+    async def _behavior_loop(self):
+        """Poll /behavior_status at ~1 Hz."""
+        while self._running:
+            try:
+                await asyncio.sleep(1.0)
+                status = await self._poll_behavior_status()
+                if status:
+                    await self.send(text_data=json.dumps({"type": "behavior_status", "data": status}))
+            except asyncio.CancelledError:
+                break
+            except Exception:
+                await asyncio.sleep(2)
+
+    async def _poll_behavior_status(self):
+        """Read /behavior_status topic."""
+        cmd = (
+            f"docker exec {self._container} bash -c "
+            "'source /opt/ros/humble/setup.bash && source /ros2_ws/install/setup.bash 2>/dev/null; "
+            "timeout 1 ros2 topic echo --once /behavior_status std_msgs/String 2>/dev/null'"
+        )
+        try:
+            proc = await asyncio.create_subprocess_shell(
+                cmd,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+            )
+            stdout, _ = await asyncio.wait_for(proc.communicate(), timeout=3)
+            if not stdout:
+                return None
+            text = stdout.decode("utf-8", errors="replace")
+            for line in text.splitlines():
+                line = line.strip()
+                if line.startswith("data:"):
+                    val = line[5:].strip().strip('"').strip("'")
+                    return json.loads(val)
+            return None
+        except (asyncio.TimeoutError, json.JSONDecodeError, ValueError):
+            return None
+
+
+class MapConsumer(AsyncWebsocketConsumer):
+    """Streams the SLAM /map (OccupancyGrid) as PNG images and robot pose to the browser.
+
+    Polls at ~1 Hz. Converts OccupancyGrid data to a grayscale PNG via inline Python
+    in the ROS 2 container.
+    """
+
+    async def connect(self):
+        await self.accept()
+        self._running = True
+        self._container = getattr(settings, "ROS2_CONTAINER_NAME", "billybot-ros2")
+        asyncio.ensure_future(self._map_loop())
+
+    async def disconnect(self, close_code):
+        self._running = False
+
+    async def receive(self, text_data=None, bytes_data=None):
+        pass
+
+    async def _map_loop(self):
+        """Poll /map and /odom at ~1 Hz and push to browser."""
+        while self._running:
+            try:
+                await asyncio.sleep(1.0)
+                map_data, pose_data = await asyncio.gather(
+                    self._grab_map(),
+                    self._grab_pose(),
+                )
+                msg = {"type": "map_update"}
+                if map_data:
+                    msg["map"] = map_data["image"]
+                    msg["map_info"] = map_data["info"]
+                if pose_data:
+                    msg["pose"] = pose_data
+                if map_data or pose_data:
+                    await self.send(text_data=json.dumps(msg))
+            except asyncio.CancelledError:
+                break
+            except Exception:
+                await asyncio.sleep(2)
+
+    async def _grab_map(self):
+        """Grab /map OccupancyGrid, render as PNG, return base64 + metadata."""
+        cmd = (
+            f"docker exec {self._container} bash -c "
+            "'source /opt/ros/humble/setup.bash && source /ros2_ws/install/setup.bash 2>/dev/null; "
+            "python3 -c \""
+            "import rclpy, base64, sys, json; "
+            "import numpy as np; "
+            "from nav_msgs.msg import OccupancyGrid; "
+            "rclpy.init(); "
+            "node = rclpy.create_node(\\\"_map_grab\\\"); "
+            "msg = [None]; "
+            "sub = node.create_subscription(OccupancyGrid, \\\"/map\\\", lambda m: (msg.__setitem__(0, m), rclpy.shutdown()), 1); "
+            "import threading; t = threading.Timer(2.0, lambda: rclpy.try_shutdown()); t.start(); "
+            "rclpy.spin(node); t.cancel(); node.destroy_node(); "
+            "if not msg[0]: sys.exit(0); "
+            "grid = msg[0]; "
+            "w, h = grid.info.width, grid.info.height; "
+            "data = np.array(grid.data, dtype=np.int8).reshape((h, w)); "
+            "img = np.zeros((h, w), dtype=np.uint8); "
+            "img[data == -1] = 128; "
+            "img[data == 0] = 255; "
+            "img[(data > 0) & (data <= 100)] = (100 - data[(data > 0) & (data <= 100)]).astype(np.uint8) * 255 // 100; "
+            "from io import BytesIO; "
+            "import struct, zlib; "
+            "def png(a): "
+            "  h2, w2 = a.shape; raw = b''; "
+            "  for r in range(h2): raw += b'\\\\x00' + a[r].tobytes(); "
+            "  d = zlib.compress(raw); "
+            "  def chunk(t, d2): return struct.pack('>I', len(d2)) + t + d2 + struct.pack('>I', zlib.crc32(t + d2) & 0xffffffff); "
+            "  return b'\\\\x89PNG\\\\r\\\\n\\\\x1a\\\\n' + chunk(b'IHDR', struct.pack('>IIBBBBB', w2, h2, 8, 0, 0, 0, 0)) + chunk(b'IDAT', d) + chunk(b'IEND', b''); "
+            "b = png(np.flipud(img)); "
+            "info = {'w': w, 'h': h, 'res': grid.info.resolution, 'ox': grid.info.origin.position.x, 'oy': grid.info.origin.position.y}; "
+            "out = json.dumps({'img': base64.b64encode(b).decode(), 'info': info}); "
+            "sys.stdout.write(out); "
+            "\"'"
+        )
+        try:
+            proc = await asyncio.create_subprocess_shell(
+                cmd,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+            )
+            stdout, _ = await asyncio.wait_for(proc.communicate(), timeout=8)
+            if stdout:
+                data = json.loads(stdout.decode("utf-8", errors="replace").strip())
+                return {"image": data["img"], "info": data["info"]}
+            return None
+        except (asyncio.TimeoutError, json.JSONDecodeError, Exception):
+            return None
+
+    async def _grab_pose(self):
+        """Grab robot pose from /odom (nav_msgs/Odometry)."""
+        cmd = (
+            f"docker exec {self._container} bash -c "
+            "'source /opt/ros/humble/setup.bash && source /ros2_ws/install/setup.bash 2>/dev/null; "
+            "python3 -c \""
+            "import rclpy, sys, json, math; "
+            "from nav_msgs.msg import Odometry; "
+            "rclpy.init(); "
+            "node = rclpy.create_node(\\\"_pose_grab\\\"); "
+            "msg = [None]; "
+            "sub = node.create_subscription(Odometry, \\\"/odom\\\", lambda m: (msg.__setitem__(0, m), rclpy.shutdown()), 1); "
+            "import threading; t = threading.Timer(2.0, lambda: rclpy.try_shutdown()); t.start(); "
+            "rclpy.spin(node); t.cancel(); node.destroy_node(); "
+            "if not msg[0]: sys.exit(0); "
+            "p = msg[0].pose.pose; "
+            "siny = 2.0 * (p.orientation.w * p.orientation.z + p.orientation.x * p.orientation.y); "
+            "cosy = 1.0 - 2.0 * (p.orientation.y**2 + p.orientation.z**2); "
+            "yaw = math.atan2(siny, cosy); "
+            "out = json.dumps({'x': p.position.x, 'y': p.position.y, 'yaw': yaw}); "
+            "sys.stdout.write(out); "
+            "\"'"
+        )
+        try:
+            proc = await asyncio.create_subprocess_shell(
+                cmd,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+            )
+            stdout, _ = await asyncio.wait_for(proc.communicate(), timeout=5)
+            if stdout:
+                return json.loads(stdout.decode("utf-8", errors="replace").strip())
+            return None
+        except (asyncio.TimeoutError, json.JSONDecodeError, Exception):
+            return None
+
+
 class LogConsumer(AsyncWebsocketConsumer):
     """Streams container logs in real-time."""
 

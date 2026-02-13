@@ -13,6 +13,9 @@ urlpatterns = [
     path("chat/", views.chat, name="chat"),
     path("logs/", views.logs, name="logs"),
     path("vision/", views.vision, name="vision"),
+    path("behaviors/", views.behaviors, name="behaviors"),
+    path("arm/", views.arm, name="arm"),
+    path("fleet/", views.fleet, name="fleet"),
     path("settings/", views.settings_view, name="settings"),
     # API endpoints
     path("api/ros2/exec/", views.api_ros2_exec, name="api_ros2_exec"),
@@ -39,8 +42,13 @@ urlpatterns = [
     path("api/nav/status/", views.api_nav_status, name="api_nav_status"),
     path("api/nav/goal/", views.api_nav_goal, name="api_nav_goal"),
     path("api/nav/cancel/", views.api_nav_cancel, name="api_nav_cancel"),
+    path("api/map/save/", views.api_map_save, name="api_map_save"),
+    path("api/map/load/", views.api_map_load, name="api_map_load"),
+    path("api/map/list/", views.api_map_list, name="api_map_list"),
     path("api/camera/snapshot/", views.api_camera_snapshot, name="api_camera_snapshot"),
     # Health & Observability
     path("api/health/", views.api_health, name="api_health"),
     path("api/system/health/", views.api_system_health, name="api_system_health"),
+    # Fleet API
+    path("api/fleet/robots/", views.api_fleet_robots, name="api_fleet_robots"),
 ]

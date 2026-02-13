@@ -2,6 +2,94 @@
 {% block title %}Topics{% endblock %}
 {% block page_title %}Topics Explorer{% endblock %}
 
+{% block help_modal %}
+<div id="helpModal" class="hidden fixed inset-0 z-50 hud-modal-backdrop flex items-start justify-center pt-20 px-4" onclick="if(event.target===this)this.classList.add('hidden')">
+  <div class="hud-modal rounded-2xl max-w-2xl w-full max-h-[75vh] overflow-y-auto p-8">
+    <div class="flex items-center justify-between mb-6">
+      <h2 class="text-lg font-semibold text-white tracking-tight">Topics Explorer Documentation</h2>
+      <button onclick="document.getElementById('helpModal').classList.add('hidden')" class="text-slate-500 hover:text-white transition-colors text-xl leading-none">&times;</button>
+    </div>
+
+    <div class="doc-section">
+      <h3>Overview</h3>
+      <p>The Topics Explorer provides a two-panel interface for browsing and inspecting all active ROS 2 topics on the DDS network. Topics are the primary pub/sub communication channels between ROS 2 nodes.</p>
+      <p>Data is fetched from <code>/api/ros2/topics/</code> which runs <code>ros2 topic list -t</code> inside the ROS 2 container via <code>docker exec</code>.</p>
+    </div>
+
+    <div class="doc-section">
+      <h3>Left Panel &mdash; Topic List</h3>
+      <p>Displays all discovered topics with their message types. Use the filter input to search by topic name.</p>
+      <dl class="doc-grid">
+        <dt>Filter</dt>
+        <dd>Case-insensitive substring match against topic names. Useful for finding topics by namespace (e.g., <code>/grunt1</code>) or type (e.g., <code>cmd_vel</code>).</dd>
+        <dt>Topic Name</dt>
+        <dd>Full ROS 2 topic path including namespace prefix (e.g., <code>/grunt1/cmd_vel</code>).</dd>
+        <dt>Message Type</dt>
+        <dd>ROS 2 message type shown to the right (e.g., <code>geometry_msgs/msg/Twist</code>).</dd>
+        <dt>Selection</dt>
+        <dd>Click a topic to load its detail in the right panel. Selected topic is highlighted with cyan accent.</dd>
+      </dl>
+    </div>
+
+    <div class="doc-section">
+      <h3>Right Panel &mdash; Topic Detail</h3>
+      <p>Shows detailed information about the selected topic including publisher/subscriber counts.</p>
+      <dl class="doc-grid">
+        <dt>Type</dt>
+        <dd>The ROS 2 message type (e.g., <code>sensor_msgs/msg/Image</code>). Determines the structure of data published on this topic.</dd>
+        <dt>Publishers</dt>
+        <dd>Number of active publisher nodes. Obtained via <code>ros2 topic info</code>.</dd>
+        <dt>Subscribers</dt>
+        <dd>Number of active subscriber nodes listening on this topic.</dd>
+      </dl>
+    </div>
+
+    <div class="doc-section">
+      <h3>Echo Message</h3>
+      <p>Captures a single message from the selected topic in real-time. This runs <code>ros2 topic echo --once</code> inside the ROS 2 container.</p>
+      <div class="warn-box mt-3">
+        <p><strong>Note:</strong> Echo captures one message then stops. For high-frequency topics (e.g., <code>/cmd_vel</code> at 10Hz) this returns almost instantly. For low-frequency or event-driven topics, it may take several seconds until a message is published.</p>
+      </div>
+      <div class="info-box mt-3">
+        <p>The echo output shows the full YAML-serialized message structure, making it useful for debugging message contents and field values.</p>
+      </div>
+    </div>
+
+    <div class="doc-section">
+      <h3>Common BillyBot Topics</h3>
+      <dl class="doc-grid">
+        <dt><span class="topic-tag">/cmd_vel</span></dt>
+        <dd><code>geometry_msgs/Twist</code> &mdash; Drive velocity commands (linear.x, angular.z).</dd>
+        <dt><span class="topic-tag">/odom</span></dt>
+        <dd><code>nav_msgs/Odometry</code> &mdash; Wheel encoder odometry (position + velocity).</dd>
+        <dt><span class="topic-tag">/motor_feedback</span></dt>
+        <dd><code>std_msgs/String</code> &mdash; JSON-encoded DDSM210 motor telemetry (RPM, temp, current).</dd>
+        <dt><span class="topic-tag">/camera/color/image_raw</span></dt>
+        <dd><code>sensor_msgs/Image</code> &mdash; RealSense D435i RGB camera feed.</dd>
+        <dt><span class="topic-tag">/map</span></dt>
+        <dd><code>nav_msgs/OccupancyGrid</code> &mdash; SLAM-generated map from slam_toolbox.</dd>
+        <dt><span class="topic-tag">/goal_pose</span></dt>
+        <dd><code>geometry_msgs/PoseStamped</code> &mdash; Navigation goals for Nav2.</dd>
+        <dt><span class="topic-tag">/audio_energy</span></dt>
+        <dd><code>std_msgs/Float32</code> &mdash; Microphone RMS energy level for VAD.</dd>
+        <dt><span class="topic-tag">/behavior_status</span></dt>
+        <dd><code>std_msgs/String</code> &mdash; JSON-encoded FSM state from behavior_manager.</dd>
+      </dl>
+    </div>
+
+    <div class="doc-section">
+      <h3>API Endpoints</h3>
+      <dl class="doc-grid">
+        <dt>GET /api/ros2/topics/</dt>
+        <dd>Returns list of all active topics with message types.</dd>
+        <dt>GET /api/ros2/topic-echo/</dt>
+        <dd>Echoes a single message. Params: <code>topic</code> (required), <code>count</code> (default 1), <code>info</code> (get publisher/subscriber counts).</dd>
+      </dl>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
 {% block content %}
 <div x-data="topicsApp()" x-init="init()">
 
