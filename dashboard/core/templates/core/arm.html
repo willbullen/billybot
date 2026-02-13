@@ -2,6 +2,114 @@
 {% block title %}Arm Control{% endblock %}
 {% block page_title %}Arm & Manipulation{% endblock %}
 
+{% block help_modal %}
+<div id="helpModal" class="hidden fixed inset-0 z-50 hud-modal-backdrop flex items-start justify-center pt-20 px-4" onclick="if(event.target===this)this.classList.add('hidden')">
+  <div class="hud-modal rounded-2xl max-w-2xl w-full max-h-[75vh] overflow-y-auto p-8">
+    <div class="flex items-center justify-between mb-6">
+      <h2 class="text-lg font-semibold text-white tracking-tight">Arm &amp; Manipulation Documentation</h2>
+      <button onclick="document.getElementById('helpModal').classList.add('hidden')" class="text-slate-500 hover:text-white transition-colors text-xl leading-none">&times;</button>
+    </div>
+
+    <div class="doc-section">
+      <h3>Overview</h3>
+      <p>The Arm Control page provides direct joint-level control of the ST3215 serial servo arm with real-time SVG visualization. The arm consists of two joints: pan (horizontal rotation) and tilt (vertical angle), controlling the camera head.</p>
+      <p>Commands are sent via the Ros2BridgeConsumer WebSocket (<code>ws/ros2/</code>) to the ST3215 driver node.</p>
+    </div>
+
+    <div class="doc-section">
+      <h3>Hardware</h3>
+      <dl class="doc-grid">
+        <dt>Servo Model</dt>
+        <dd>Waveshare ST3215 serial bus servos. TTL protocol at 1,000,000 baud.</dd>
+        <dt>Servo IDs</dt>
+        <dd>ID 1: Pan joint (arm_pan_joint). ID 2: Tilt joint (arm_tilt_joint).</dd>
+        <dt>Position Range</dt>
+        <dd>0&ndash;4095 (12-bit). Center position: 2048. Full range: &plusmn;180&deg;.</dd>
+        <dt>Connection</dt>
+        <dd>USB-TTL adapter to <code>/dev/ttyUSB0</code>. Daisy-chained on shared TTL bus.</dd>
+        <dt>Simulation</dt>
+        <dd>Auto-activates when serial port is unavailable. All positions tracked in software.</dd>
+      </dl>
+    </div>
+
+    <div class="doc-section">
+      <h3>SVG Visualization</h3>
+      <p>The arm visualization shows a schematic 2D side-view of the pan/tilt mechanism:</p>
+      <dl class="doc-grid">
+        <dt>Base</dt>
+        <dd>Fixed robot chassis mounting point.</dd>
+        <dt>Pan Joint (cyan circle)</dt>
+        <dd>Rotates the upper arm horizontally. Connected to slider control.</dd>
+        <dt>Tilt Joint (blue circle)</dt>
+        <dd>Tilts the camera head vertically. Connected to slider control.</dd>
+        <dt>Camera (rectangle)</dt>
+        <dd>RealSense D435i camera with FOV cone visualization.</dd>
+        <dt>Compass (bottom-right)</dt>
+        <dd>Shows current pan direction relative to forward.</dd>
+      </dl>
+    </div>
+
+    <div class="doc-section">
+      <h3>Joint Sliders</h3>
+      <p>Direct servo position control via sliders mapped to the 0&ndash;4095 range:</p>
+      <dl class="doc-grid">
+        <dt>Pan Slider</dt>
+        <dd>Controls horizontal rotation. Center (2048) = forward. 3072 = left 90&deg;. 1024 = right 90&deg;.</dd>
+        <dt>Tilt Slider</dt>
+        <dd>Controls vertical angle. 2048 = level. 3072 = tilted up. 512 = tilted down (reach).</dd>
+        <dt>Quick Buttons</dt>
+        <dd>Preset positions for common angles. Pan: L, L-ish, FWD, R-ish, R. Tilt: Down, Mid, Level, Up.</dd>
+      </dl>
+    </div>
+
+    <div class="doc-section">
+      <h3>Arm Presets</h3>
+      <p>Pre-programmed joint configurations for common arm positions. Published to <code>/grunt1/arm_preset</code> (std_msgs/String):</p>
+      <dl class="doc-grid">
+        <dt>Bumper [2048, 3072]</dt>
+        <dd>Protective low position. Camera aimed downward. Use when robot is in transit.</dd>
+        <dt>Ten-Hut [2048, 2048]</dt>
+        <dd>Home/center position. Both joints at midpoint. Default resting pose.</dd>
+        <dt>Look Up [2048, 1024]</dt>
+        <dd>Camera aimed upward. Useful for looking at people&rsquo;s faces or ceiling features.</dd>
+        <dt>Look Out [2048, 1536]</dt>
+        <dd>Camera aimed forward at chest height. Primary scanning/navigation pose.</dd>
+        <dt>Reach [2048, 512]</dt>
+        <dd>Maximum extension. Camera aimed almost straight down. For inspecting ground-level objects.</dd>
+        <dt>Pan [variable]</dt>
+        <dd>Pan-only control. Requires bearing modifier (e.g., <code>pan@left</code>).</dd>
+      </dl>
+    </div>
+
+    <div class="doc-section">
+      <h3>Bearing System</h3>
+      <p>Bearings modify the pan angle of any preset. Format: <code>preset@bearing</code> (e.g., <code>lookout@leftish</code>).</p>
+      <dl class="doc-grid">
+        <dt>forward (2048)</dt>
+        <dd>Dead ahead. 0&deg; offset.</dd>
+        <dt>leftish (2560) / rightish (1536)</dt>
+        <dd>Slight turn. ~45&deg; offset.</dd>
+        <dt>left (3072) / right (1024)</dt>
+        <dd>Quarter turn. 90&deg; offset.</dd>
+        <dt>full-left (3584) / full-right (512)</dt>
+        <dd>Near-maximum turn. ~135&deg; offset.</dd>
+        <dt>back (0 or 4095)</dt>
+        <dd>Looking behind. 180&deg; offset.</dd>
+        <dt>back-left / back-right</dt>
+        <dd>Rear diagonal. ~135&deg; offset.</dd>
+      </dl>
+    </div>
+
+    <div class="doc-section">
+      <h3>Topics Used</h3>
+      <div class="flex flex-wrap gap-1">
+        <span class="topic-tag">/grunt1/arm_preset</span><span class="topic-tag">/joint_command</span><span class="topic-tag">/joint_states</span><span class="topic-tag">/pantilt_cmd</span>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
 {% block extra_head %}
 <style>
   .hud-panel { background: rgba(30, 41, 59, 0.5); backdrop-filter: blur(12px); border: 1px solid rgba(6, 182, 212, 0.2); }

@@ -2,6 +2,148 @@
 {% block title %}Settings{% endblock %}
 {% block page_title %}Settings{% endblock %}
 
+{% block help_modal %}
+<div id="helpModal" class="hidden fixed inset-0 z-50 hud-modal-backdrop flex items-start justify-center pt-20 px-4" onclick="if(event.target===this)this.classList.add('hidden')">
+  <div class="hud-modal rounded-2xl max-w-2xl w-full max-h-[75vh] overflow-y-auto p-8">
+    <div class="flex items-center justify-between mb-6">
+      <h2 class="text-lg font-semibold text-white tracking-tight">Settings &amp; System Documentation</h2>
+      <button onclick="document.getElementById('helpModal').classList.add('hidden')" class="text-slate-500 hover:text-white transition-colors text-xl leading-none">&times;</button>
+    </div>
+
+    <div class="doc-section">
+      <h3>Overview</h3>
+      <p>The Settings page provides system-wide management including Docker container control, health monitoring, launch configuration reference, environment variables, and deployment controls.</p>
+      <p>Health data refreshes automatically every <code>15 seconds</code> via <code>/api/system/health/</code>.</p>
+    </div>
+
+    <div class="doc-section">
+      <h3>Containers</h3>
+      <p>Live status of all Docker containers in the BillyBot stack. Each container can be individually restarted.</p>
+      <dl class="doc-grid">
+        <dt>billybot-ros2</dt>
+        <dd>ROS 2 Humble container. Runs all robot nodes: motor drivers, audio pipeline, voice agents, SLAM, Nav2, behavior manager. Uses <code>network_mode: host</code> for DDS multicast.</dd>
+        <dt>billybot-nanobot</dt>
+        <dd>Nanobot AI gateway. Provides multi-model LLM access with tools, memory, and scheduled jobs. Connects to ROS 2 via the <code>ros2</code> tool.</dd>
+        <dt>billybot-dashboard</dt>
+        <dd>Django + Channels + Daphne. Serves the web dashboard, REST APIs, and WebSocket connections. Communicates with ROS 2 container via <code>docker exec</code>.</dd>
+      </dl>
+      <div class="warn-box mt-3">
+        <p><strong>Restart Warning:</strong> Restarting the ROS 2 container will stop all robot nodes, interrupting motor control, navigation, and voice processing. The robot will stop moving. Nodes auto-restart when the container comes back up.</p>
+      </div>
+    </div>
+
+    <div class="doc-section">
+      <h3>System Health</h3>
+      <p>Aggregated health status across all subsystems. The overall badge shows:</p>
+      <dl class="doc-grid">
+        <dt class="text-emerald-400">HEALTHY</dt>
+        <dd>All containers running, ROS 2 nodes active, topics publishing.</dd>
+        <dt class="text-amber-400">DEGRADED</dt>
+        <dd>Some containers or nodes not responding. Partial functionality available.</dd>
+        <dt class="text-red-400">UNHEALTHY</dt>
+        <dd>Critical failure. Core containers or nodes are down.</dd>
+      </dl>
+      <dl class="doc-grid mt-3">
+        <dt>Dashboard Uptime</dt>
+        <dd>Time since the Django process started. Format: days/hours/minutes/seconds.</dd>
+        <dt>ROS 2 Nodes</dt>
+        <dd>Count of active nodes from <code>ros2 node list</code>. Listed individually below.</dd>
+        <dt>ROS 2 Topics</dt>
+        <dd>Total active topic count from <code>ros2 topic list</code>.</dd>
+        <dt>Containers Running</dt>
+        <dd>Running containers vs total containers (e.g., 3/3).</dd>
+      </dl>
+    </div>
+
+    <div class="doc-section">
+      <h3>Launch Configurations</h3>
+      <p>Reference table of available ROS 2 launch files in the <code>by_your_command</code> package:</p>
+      <dl class="doc-grid">
+        <dt>oai_realtime.launch.py</dt>
+        <dd>OpenAI Realtime API for voice-only conversation with function calling.</dd>
+        <dt>oai_dual_agent.launch.py</dt>
+        <dd>OpenAI dual agent: voice conversation + parallel command extraction pipeline.</dd>
+        <dt>gemini_live.launch.py</dt>
+        <dd>Gemini Live API with optional video input from the camera.</dd>
+        <dt>gemini_dual_agent.launch.py</dt>
+        <dd>Gemini dual agent: full multimodal conversation + command extraction.</dd>
+        <dt>gemini_vision.launch.py</dt>
+        <dd>Gemini vision-focused: periodic camera frame analysis and scene description.</dd>
+        <dt>hardware.launch.py</dt>
+        <dd>Hardware layer only: URDF, DDSM210 motors, ST3215 servos. No AI.</dd>
+        <dt>camera.launch.py</dt>
+        <dd>RealSense D435i driver. Use <code>simulate:=true</code> for development without camera.</dd>
+        <dt>navigation.launch.py</dt>
+        <dd>Full nav stack: hardware + camera + slam_toolbox + Nav2. Required for autonomous navigation.</dd>
+      </dl>
+      <div class="info-box mt-3">
+        <p>Launch files are started inside the ROS 2 container:<br><code>ros2 launch by_your_command &lt;file&gt;.launch.py</code></p>
+        <p class="mt-1">Pass parameters with <code>key:=value</code> syntax, e.g., <code>namespace:=grunt2 simulate:=true</code></p>
+      </div>
+    </div>
+
+    <div class="doc-section">
+      <h3>System Info</h3>
+      <dl class="doc-grid">
+        <dt>ROS 2 Version</dt>
+        <dd>Humble Hawksbill (LTS). Ubuntu 22.04 base image.</dd>
+        <dt>ROS Domain ID</dt>
+        <dd>DDS domain for node discovery. All robots must share the same ID (default: 0). Set via <code>ROS_DOMAIN_ID</code> environment variable.</dd>
+        <dt>DDS Middleware</dt>
+        <dd>CycloneDDS (<code>rmw_cyclonedds_cpp</code>). Selected for reliable multicast discovery and shared-memory transport.</dd>
+        <dt>Bridge WebSocket</dt>
+        <dd>WebSocket endpoint for rosbridge_server (if enabled). Used by external tools like foxglove.</dd>
+        <dt>Dashboard Stack</dt>
+        <dd>Django 4.x + Channels (ASGI) + Daphne (WebSocket server). Alpine.js for reactive UI, Tailwind CSS for styling.</dd>
+      </dl>
+    </div>
+
+    <div class="doc-section">
+      <h3>Environment Variables</h3>
+      <dl class="doc-grid">
+        <dt>ROS_DOMAIN_ID</dt>
+        <dd>DDS domain for multi-robot isolation. Default: 0.</dd>
+        <dt>RMW_IMPLEMENTATION</dt>
+        <dd>DDS middleware. Always <code>rmw_cyclonedds_cpp</code>.</dd>
+        <dt>ROS2_BRIDGE_WS</dt>
+        <dd>WebSocket URL for rosbridge_server connections.</dd>
+        <dt>OPENAI_API_KEY</dt>
+        <dd>API key for OpenAI models (GPT-4o, Realtime API). Masked in UI.</dd>
+        <dt>GOOGLE_API_KEY</dt>
+        <dd>API key for Google Gemini models. Masked in UI.</dd>
+      </dl>
+    </div>
+
+    <div class="doc-section">
+      <h3>Deployment</h3>
+      <dl class="doc-grid">
+        <dt>Build &amp; Deploy</dt>
+        <dd>Triggers a full build and redeploy of all containers. Runs <code>scripts/deploy.sh</code> on the host.</dd>
+        <dt>Pull &amp; Deploy</dt>
+        <dd>Pulls latest images from registry and redeploys. Use when pre-built images are available.</dd>
+        <dt>Rollback</dt>
+        <dd>Reverts to the previous deployment. Use if a new deploy introduces issues.</dd>
+      </dl>
+      <div class="warn-box mt-3">
+        <p><strong>Note:</strong> Deployment commands are placeholders that show the host-side command to run. Actual deployment must be triggered from the host machine, not from within the container.</p>
+      </div>
+    </div>
+
+    <div class="doc-section">
+      <h3>API Endpoints</h3>
+      <dl class="doc-grid">
+        <dt>GET /api/docker/containers/</dt>
+        <dd>Returns list of containers with status, name, and running state.</dd>
+        <dt>POST /api/docker/restart/</dt>
+        <dd>Restarts a container. Body: <code>{ container: "name" }</code>.</dd>
+        <dt>GET /api/system/health/</dt>
+        <dd>Returns aggregated health: overall status, uptime, node count, topic count, container states.</dd>
+      </dl>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
 {% block content %}
 <div x-data="settingsApp()" x-init="init()">
 

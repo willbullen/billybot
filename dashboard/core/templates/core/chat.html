@@ -2,6 +2,133 @@
 {% block title %}Nanobot Chat{% endblock %}
 {% block page_title %}Nanobot Chat{% endblock %}
 
+{% block help_modal %}
+<div id="helpModal" class="hidden fixed inset-0 z-50 hud-modal-backdrop flex items-start justify-center pt-20 px-4" onclick="if(event.target===this)this.classList.add('hidden')">
+  <div class="hud-modal rounded-2xl max-w-2xl w-full max-h-[75vh] overflow-y-auto p-8">
+    <div class="flex items-center justify-between mb-6">
+      <h2 class="text-lg font-semibold text-white tracking-tight">Nanobot Chat Documentation</h2>
+      <button onclick="document.getElementById('helpModal').classList.add('hidden')" class="text-slate-500 hover:text-white transition-colors text-xl leading-none">&times;</button>
+    </div>
+
+    <div class="doc-section">
+      <h3>Overview</h3>
+      <p>Nanobot Chat provides a real-time conversational interface to the Nanobot AI agent running in the <code>billybot-nanobot</code> container. Nanobot is a multi-model AI gateway with tool access, persistent memory, and scheduled jobs.</p>
+      <p>Communication uses the <code>ws/chat/</code> WebSocket for streaming, session-persistent conversations.</p>
+    </div>
+
+    <div class="doc-section">
+      <h3>Model Selection</h3>
+      <p>Switch between AI models at runtime using the dropdown. The selected model is sent to the Nanobot gateway for the current session.</p>
+      <dl class="doc-grid">
+        <dt>Claude Opus 4.5</dt>
+        <dd><code>anthropic/claude-opus-4-5</code> &mdash; Most capable, best for complex reasoning and tool use.</dd>
+        <dt>Claude Sonnet 4.5</dt>
+        <dd><code>anthropic/claude-sonnet-4-5-20250929</code> &mdash; Balanced performance and cost.</dd>
+        <dt>Claude Haiku 4.5</dt>
+        <dd><code>anthropic/claude-haiku-4-5-20251001</code> &mdash; Fast, low-latency responses.</dd>
+        <dt>GPT-4o / Mini</dt>
+        <dd><code>openai/gpt-4o</code> &mdash; OpenAI multimodal. Mini variant for faster responses.</dd>
+        <dt>DeepSeek Chat</dt>
+        <dd><code>deepseek/deepseek-chat</code> &mdash; Open-weight model via DeepSeek API.</dd>
+        <dt>Gemini 2.5 Pro</dt>
+        <dd><code>gemini/gemini-2.5-pro</code> &mdash; Google multimodal with long context.</dd>
+        <dt>Llama 3.3 70B</dt>
+        <dd><code>groq/llama-3.3-70b-versatile</code> &mdash; Open-weight via Groq for ultra-low latency.</dd>
+      </dl>
+    </div>
+
+    <div class="doc-section">
+      <h3>Session Management</h3>
+      <dl class="doc-grid">
+        <dt>Session Indicator</dt>
+        <dd>Green pulse = WebSocket connected and active. Grey = disconnected (auto-reconnects after 3s).</dd>
+        <dt>New Session</dt>
+        <dd>Resets the conversation context on the Nanobot side. Clears local message history. Memory and cron jobs persist across sessions.</dd>
+        <dt>Restart Gateway</dt>
+        <dd>Restarts the entire Nanobot gateway process via <code>/api/nanobot/gateway/restart/</code>. Use when the agent is stuck or unresponsive. All active sessions are terminated.</dd>
+      </dl>
+      <div class="warn-box mt-3">
+        <p><strong>Caution:</strong> Restarting the gateway drops all active connections and resets all sessions. In-flight requests will be lost.</p>
+      </div>
+    </div>
+
+    <div class="doc-section">
+      <h3>Quick Commands</h3>
+      <p>Pre-built prompts for common ROS 2 operations. Click to send instantly.</p>
+      <dl class="doc-grid">
+        <dt>List nodes</dt>
+        <dd>Asks Nanobot to use the <code>ros2</code> tool to run <code>ros2 node list</code>.</dd>
+        <dt>List topics</dt>
+        <dd>Lists all topics in verbose mode showing message types.</dd>
+        <dt>Build workspace</dt>
+        <dd>Triggers <code>colcon build</code> for the <code>by_your_command</code> package.</dd>
+        <dt>Check health</dt>
+        <dd>Comprehensive health check of all containers and ROS 2 nodes.</dd>
+        <dt>Show logs</dt>
+        <dd>Fetches the last 30 lines of ROS 2 container logs.</dd>
+      </dl>
+    </div>
+
+    <div class="doc-section">
+      <h3>Config Panel</h3>
+      <p>Toggle the side panel with the &ldquo;Config&rdquo; button. Four tabs provide management controls:</p>
+      <dl class="doc-grid">
+        <dt>Config Tab</dt>
+        <dd>Edit workspace files (<code>AGENTS.md</code>, <code>SOUL.md</code>, <code>USER.md</code>, <code>TOOLS.md</code>, <code>IDENTITY.md</code>) that define the agent&rsquo;s system prompt, personality, and tool configuration. Shows model settings and Nanobot status.</dd>
+        <dt>Tools Tab</dt>
+        <dd>Lists built-in and custom skills available to the agent. Shows the <code>TOOLS.md</code> configuration file that defines custom tool access.</dd>
+        <dt>Cron Tab</dt>
+        <dd>Manage scheduled jobs. Jobs send messages to the agent on a schedule (every N seconds or cron expression). Useful for periodic health checks, log analysis, or automated patrols.</dd>
+        <dt>Memory Tab</dt>
+        <dd>View the agent&rsquo;s long-term memory and daily note files. Memory persists across sessions and gateway restarts.</dd>
+      </dl>
+    </div>
+
+    <div class="doc-section">
+      <h3>Workspace Files</h3>
+      <dl class="doc-grid">
+        <dt>AGENTS.md</dt>
+        <dd>Main system prompt. Defines the agent&rsquo;s role, capabilities, and behavioral rules.</dd>
+        <dt>SOUL.md</dt>
+        <dd>Personality layer. Controls tone, style, and character of responses.</dd>
+        <dt>USER.md</dt>
+        <dd>User context. Stores information about the user for personalization.</dd>
+        <dt>TOOLS.md</dt>
+        <dd>Tool definitions. Configures which tools (ros2, docker, shell) the agent can access and how.</dd>
+        <dt>IDENTITY.md</dt>
+        <dd>Agent identity. Name, avatar, and identity metadata.</dd>
+      </dl>
+    </div>
+
+    <div class="doc-section">
+      <h3>API Endpoints</h3>
+      <dl class="doc-grid">
+        <dt>WS /ws/chat/</dt>
+        <dd>WebSocket for real-time chat. Message types: <code>chat</code>, <code>set_model</code>, <code>reset_session</code>.</dd>
+        <dt>GET /api/nanobot/config/</dt>
+        <dd>Returns agent configuration including model defaults.</dd>
+        <dt>GET /api/nanobot/status/</dt>
+        <dd>Returns Nanobot gateway process status.</dd>
+        <dt>GET /api/nanobot/workspace/</dt>
+        <dd>Reads a workspace file. Param: <code>file</code>.</dd>
+        <dt>POST /api/nanobot/workspace/update/</dt>
+        <dd>Saves a workspace file. Body: <code>{ file, content }</code>.</dd>
+        <dt>GET /api/nanobot/tools/</dt>
+        <dd>Lists built-in and custom skills.</dd>
+        <dt>GET /api/nanobot/cron/</dt>
+        <dd>Lists scheduled jobs.</dd>
+        <dt>POST /api/nanobot/cron/manage/</dt>
+        <dd>Add/remove/run cron jobs. Body: <code>{ action, name, message, schedule_type, schedule_value }</code>.</dd>
+        <dt>GET /api/nanobot/memory/</dt>
+        <dd>Returns long-term memory content and daily note files.</dd>
+        <dt>POST /api/nanobot/gateway/restart/</dt>
+        <dd>Restarts the Nanobot gateway process.</dd>
+      </dl>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
 {% block content %}
 <div x-data="chatApp()" x-init="init()" class="flex gap-4 h-[calc(100vh-8rem)]">
 

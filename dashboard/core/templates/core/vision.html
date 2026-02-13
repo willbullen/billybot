@@ -2,6 +2,106 @@
 {% block title %}Vision & Navigation{% endblock %}
 {% block page_title %}Vision & Navigation{% endblock %}
 
+{% block help_modal %}
+<div id="helpModal" class="hidden fixed inset-0 z-50 hud-modal-backdrop flex items-start justify-center pt-20 px-4" onclick="if(event.target===this)this.classList.add('hidden')">
+  <div class="hud-modal rounded-2xl max-w-2xl w-full max-h-[75vh] overflow-y-auto p-8">
+    <div class="flex items-center justify-between mb-6">
+      <h2 class="text-lg font-semibold text-white tracking-tight">Vision &amp; Navigation Documentation</h2>
+      <button onclick="document.getElementById('helpModal').classList.add('hidden')" class="text-slate-500 hover:text-white transition-colors text-xl leading-none">&times;</button>
+    </div>
+
+    <div class="doc-section">
+      <h3>Overview</h3>
+      <p>The Vision &amp; Navigation page integrates live camera streaming, SLAM mapping, and autonomous navigation into a unified interface. It connects to two WebSocket streams: <code>ws/camera/</code> for video frames and <code>ws/map/</code> for the SLAM map and robot pose.</p>
+    </div>
+
+    <div class="doc-section">
+      <h3>Camera Feed</h3>
+      <p>Streams compressed JPEG frames from the RealSense D435i camera (or simulation fallback) via the CameraConsumer WebSocket.</p>
+      <dl class="doc-grid">
+        <dt>Source Topic</dt>
+        <dd><code>/camera/color/compressed</code> (sensor_msgs/CompressedImage)</dd>
+        <dt>FPS Control</dt>
+        <dd>Adjustable 1-15 fps via dropdown. Higher FPS = more bandwidth. 5 fps recommended for remote operation.</dd>
+        <dt>Frame Grab</dt>
+        <dd>Each frame is grabbed via an inline Python rclpy subscriber inside billybot-ros2, base64-encoded, and sent over WebSocket.</dd>
+        <dt>Simulation</dt>
+        <dd>When no camera hardware is present, the camera driver generates a HUD test pattern with crosshair, grid, depth bar, and frame counter.</dd>
+      </dl>
+    </div>
+
+    <div class="doc-section">
+      <h3>Navigation Map</h3>
+      <p>Displays the SLAM-generated occupancy grid map with robot position overlay. The MapConsumer polls <code>/map</code> (nav_msgs/OccupancyGrid) and <code>/odom</code> at 1 Hz.</p>
+      <dl class="doc-grid">
+        <dt>Map Colors</dt>
+        <dd>White = free space. Black = obstacles. Gray = unknown/unexplored.</dd>
+        <dt>Robot Arrow</dt>
+        <dd>Cyan triangle showing current position and heading from odometry.</dd>
+        <dt>Click-to-Navigate</dt>
+        <dd>Click anywhere on the map to set a navigation goal. The click position is converted to world coordinates using map metadata (resolution, origin).</dd>
+        <dt>Goal Marker</dt>
+        <dd>Pulsing cyan circle shows the pending navigation goal location.</dd>
+      </dl>
+    </div>
+
+    <div class="doc-section">
+      <h3>SLAM &amp; Map Management</h3>
+      <p>SLAM Toolbox runs in <code>async_slam_toolbox_node</code> mode for real-time mapping.</p>
+      <dl class="doc-grid">
+        <dt>Save Map</dt>
+        <dd>Calls <code>/slam_toolbox/save_map</code> service. Saves .pgm + .yaml to /tmp/ in the ROS container.</dd>
+        <dt>Load Map</dt>
+        <dd>Calls <code>/slam_toolbox/deserialize_map</code> to load a previously saved map for localization.</dd>
+        <dt>Map List</dt>
+        <dd>The Maps panel shows all .pgm/.yaml files in /tmp/ that can be loaded.</dd>
+      </dl>
+    </div>
+
+    <div class="doc-section">
+      <h3>Navigation Controls</h3>
+      <p>Manual navigation goal input using X, Y, and Yaw fields. Goals are published as <code>geometry_msgs/PoseStamped</code> to <code>/goal_pose</code>.</p>
+      <dl class="doc-grid">
+        <dt>X / Y</dt>
+        <dd>World coordinates in meters relative to the map frame origin.</dd>
+        <dt>Yaw</dt>
+        <dd>Goal orientation in radians. 0 = facing positive X. &pi;/2 = facing positive Y.</dd>
+        <dt>Cancel</dt>
+        <dd>Cancels the active navigation goal via <code>/navigate_to_pose/_action/cancel_goal</code>.</dd>
+      </dl>
+    </div>
+
+    <div class="doc-section">
+      <h3>Navigation Stack</h3>
+      <div class="info-box">
+        <p><strong>Launch:</strong> <code>ros2 launch by_your_command navigation.launch.py simulate:=true</code></p>
+        <p class="mt-1">Includes: hardware drivers + camera + depthimage_to_laserscan + SLAM Toolbox + Nav2 (DWB controller, NavFn planner, BT navigator, lifecycle manager).</p>
+      </div>
+    </div>
+
+    <div class="doc-section">
+      <h3>Voice-to-Nav Commands</h3>
+      <p>The command_processor node routes voice commands to navigation goals:</p>
+      <dl class="doc-grid">
+        <dt><code>goto@kitchen</code></dt>
+        <dd>Navigate to a named location. Available: home, kitchen, bedroom, living, door, garage, office, charging.</dd>
+        <dt><code>goto@1.5,2.0</code></dt>
+        <dd>Navigate to specific coordinates (x, y). Optional yaw: <code>goto@1.5,2.0,1.57</code></dd>
+        <dt><code>patrol</code></dt>
+        <dd>Cycle through predefined patrol waypoints continuously.</dd>
+      </dl>
+    </div>
+
+    <div class="doc-section">
+      <h3>Topics Used</h3>
+      <div class="flex flex-wrap gap-1">
+        <span class="topic-tag">/camera/color/compressed</span><span class="topic-tag">/camera/depth/image_rect_raw</span><span class="topic-tag">/camera/camera_info</span><span class="topic-tag">/map</span><span class="topic-tag">/odom</span><span class="topic-tag">/goal_pose</span><span class="topic-tag">/scan</span>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
 {% block extra_head %}
 <style>
   .hud-panel {

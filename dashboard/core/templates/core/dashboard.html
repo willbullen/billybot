@@ -2,6 +2,69 @@
 {% block title %}Dashboard{% endblock %}
 {% block page_title %}Dashboard{% endblock %}
 
+{% block help_modal %}
+<div id="helpModal" class="hidden fixed inset-0 z-50 hud-modal-backdrop flex items-start justify-center pt-20 px-4" onclick="if(event.target===this)this.classList.add('hidden')">
+  <div class="hud-modal rounded-2xl max-w-2xl w-full max-h-[75vh] overflow-y-auto p-8">
+    <div class="flex items-center justify-between mb-6">
+      <h2 class="text-lg font-semibold text-white tracking-tight">Dashboard Documentation</h2>
+      <button onclick="document.getElementById('helpModal').classList.add('hidden')" class="text-slate-500 hover:text-white transition-colors text-xl leading-none">&times;</button>
+    </div>
+
+    <div class="doc-section">
+      <h3>Overview</h3>
+      <p>The Dashboard is your primary operational overview of the entire BillyBot system. It aggregates real-time status from all Docker containers, active ROS 2 nodes, and running topics into a single, glanceable interface.</p>
+      <p>Data refreshes automatically every <code>10 seconds</code> via REST API polling against <code>/api/docker/containers/</code>, <code>/api/ros2/nodes/</code>, and <code>/api/ros2/topics/</code>.</p>
+    </div>
+
+    <div class="doc-section">
+      <h3>Status Cards</h3>
+      <p>The top row displays four aggregated metrics:</p>
+      <dl class="doc-grid">
+        <dt>Containers</dt>
+        <dd>Count of billybot-* Docker containers currently running vs total. Green = all running. Yellow = partial. Red = none running.</dd>
+        <dt>ROS 2 Nodes</dt>
+        <dd>Total number of active ROS 2 nodes discovered via <code>ros2 node list</code> inside the billybot-ros2 container.</dd>
+        <dt>Topics</dt>
+        <dd>Active ROS 2 topic count from <code>ros2 topic list</code>. Includes system topics (/rosout, /parameter_events).</dd>
+        <dt>System Health</dt>
+        <dd>Composite health indicator based on container status and node availability. Maps to OPERATIONAL / DEGRADED / OFFLINE.</dd>
+      </dl>
+    </div>
+
+    <div class="doc-section">
+      <h3>Docker Containers</h3>
+      <p>Lists all BillyBot containers with their current state and uptime:</p>
+      <dl class="doc-grid">
+        <dt>billybot-ros2</dt>
+        <dd>ROS 2 Humble + ByYourCommand voice/AI pipeline. Contains all ROS nodes, audio processing, and AI agents.</dd>
+        <dt>billybot-nanobot</dt>
+        <dd>Nanobot AI assistant gateway. Multi-channel bot (Telegram, Slack, Discord) with ROS 2 management tool.</dd>
+        <dt>billybot-dashboard</dt>
+        <dd>This Django + Channels web dashboard. Daphne ASGI server on port 8000.</dd>
+        <dt>billybot-redis</dt>
+        <dd>Redis 7 channel layer for Django Channels WebSocket support.</dd>
+      </dl>
+    </div>
+
+    <div class="doc-section">
+      <h3>Quick Actions</h3>
+      <p>Bottom action buttons link directly to key operational pages. The activity log shows the last 20 system events including container state changes and node launches.</p>
+    </div>
+
+    <div class="doc-section">
+      <h3>Architecture</h3>
+      <div class="info-box">
+        <p class="font-mono text-xs leading-relaxed">docker-compose.yml<br>
+        &nbsp;&nbsp;ros2-byc &rarr; billybot-ros2 (ROS 2 + voice + AI agents)<br>
+        &nbsp;&nbsp;nanobot &rarr; billybot-nanobot (AI assistant gateway)<br>
+        &nbsp;&nbsp;dashboard &rarr; billybot-dashboard (Django + WebSocket)<br>
+        &nbsp;&nbsp;redis &rarr; billybot-redis (channel layer)</p>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
 {% block content %}
 <div x-data="dashboardApp()" x-init="init()">
 

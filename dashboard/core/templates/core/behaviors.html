@@ -2,6 +2,128 @@
 {% block title %}Behaviors{% endblock %}
 {% block page_title %}Autonomous Behaviors{% endblock %}
 
+{% block help_modal %}
+<div id="helpModal" class="hidden fixed inset-0 z-50 hud-modal-backdrop flex items-start justify-center pt-20 px-4" onclick="if(event.target===this)this.classList.add('hidden')">
+  <div class="hud-modal rounded-2xl max-w-2xl w-full max-h-[75vh] overflow-y-auto p-8">
+    <div class="flex items-center justify-between mb-6">
+      <h2 class="text-lg font-semibold text-white tracking-tight">Autonomous Behaviors Documentation</h2>
+      <button onclick="document.getElementById('helpModal').classList.add('hidden')" class="text-slate-500 hover:text-white transition-colors text-xl leading-none">&times;</button>
+    </div>
+
+    <div class="doc-section">
+      <h3>Overview</h3>
+      <p>The Behaviors page provides command and monitoring for the <code>behavior_manager_node</code>, a finite state machine (FSM) that orchestrates high-level autonomous robot behaviors. The node ticks at <code>5 Hz</code> and publishes status at <code>1 Hz</code> to <code>/behavior_status</code>.</p>
+      <p>Commands are sent via the BehaviorConsumer WebSocket (<code>ws/behaviors/</code>) which publishes to <code>/grunt1/behavior_command</code>.</p>
+    </div>
+
+    <div class="doc-section">
+      <h3>States</h3>
+      <p>The behavior manager operates as a finite state machine with five states:</p>
+      <dl class="doc-grid">
+        <dt>IDLE</dt>
+        <dd>Default state. Robot is stationary, no active behavior. All behaviors transition here on <code>stop</code> command.</dd>
+        <dt>PATROL</dt>
+        <dd>Cycles through waypoints using Nav2 goal publishing. Loops continuously. 30-second timeout per waypoint &mdash; auto-skips if stuck.</dd>
+        <dt>SEARCH</dt>
+        <dd>Expanding spiral pattern from current position. Covers configurable radius in rings of 4 points each. Returns to origin when complete.</dd>
+        <dt>FOLLOW</dt>
+        <dd>Tracks a detected target (from <code>/detected_target</code> topic) while maintaining safe distance. Rotates to face target when close, navigates toward it when far.</dd>
+        <dt>GUARD</dt>
+        <dd>Stations at current position and periodically scans N/E/S/W by rotating the camera arm. Auto-returns to guard position if displaced &gt;0.5m.</dd>
+      </dl>
+    </div>
+
+    <div class="doc-section">
+      <h3>Patrol Behavior (Detail)</h3>
+      <p>Default waypoints form a 2m &times; 2m square pattern. Each waypoint specifies (x, y, yaw) in the map frame.</p>
+      <dl class="doc-grid">
+        <dt>Loop Mode</dt>
+        <dd>When enabled (default), patrol restarts from waypoint 1 after reaching the last waypoint.</dd>
+        <dt>Timeout</dt>
+        <dd>30 seconds per waypoint. If the robot cannot reach a waypoint (obstacle, nav failure), it skips to the next.</dd>
+        <dt>Goal Tolerance</dt>
+        <dd>0.3m &mdash; the robot considers a waypoint reached when within this distance.</dd>
+        <dt>Custom Waypoints</dt>
+        <dd>Add custom waypoints via the UI panel. Enter X, Y, Yaw values and click Add.</dd>
+      </dl>
+    </div>
+
+    <div class="doc-section">
+      <h3>Search Behavior (Detail)</h3>
+      <dl class="doc-grid">
+        <dt>Pattern</dt>
+        <dd>Expanding spiral: 4 points per ring at 90&deg; intervals, increasing radius each ring.</dd>
+        <dt>Search Radius</dt>
+        <dd>Default 3.0m from origin. Configurable via <code>search_radius</code> parameter.</dd>
+        <dt>Step Size</dt>
+        <dd>Default 1.0m between rings. Configurable via <code>search_step</code> parameter.</dd>
+        <dt>Camera</dt>
+        <dd>Arm set to <code>lookup</code> position for maximum field of view during search.</dd>
+      </dl>
+    </div>
+
+    <div class="doc-section">
+      <h3>Follow Behavior (Detail)</h3>
+      <dl class="doc-grid">
+        <dt>Target Source</dt>
+        <dd>Subscribes to <code>/detected_target</code> (String JSON with label, x, y fields). Vision pipeline publishes detected object positions here.</dd>
+        <dt>Follow Distance</dt>
+        <dd>Default 1.5m. Robot navigates to maintain this distance from target.</dd>
+        <dt>Close Range</dt>
+        <dd>Within follow_distance: robot rotates to face target (proportional yaw control).</dd>
+        <dt>Far Range</dt>
+        <dd>Beyond 1.5&times; follow_distance: robot publishes nav goal toward target.</dd>
+      </dl>
+    </div>
+
+    <div class="doc-section">
+      <h3>Guard Behavior (Detail)</h3>
+      <dl class="doc-grid">
+        <dt>Scan Cycle</dt>
+        <dd>Every 10 seconds, rotates camera to next cardinal direction: North &rarr; East &rarr; South &rarr; West.</dd>
+        <dt>Position Hold</dt>
+        <dd>If odometry shows &gt;0.5m drift from guard position, auto-navigates back.</dd>
+        <dt>Camera Control</dt>
+        <dd>Uses <code>pan@forward</code>, <code>pan@right</code>, <code>pan@back</code>, <code>pan@left</code> arm presets for directional scanning.</dd>
+      </dl>
+    </div>
+
+    <div class="doc-section">
+      <h3>Voice Commands</h3>
+      <p>Behaviors can be triggered via voice through the AI agent pipeline:</p>
+      <dl class="doc-grid">
+        <dt><code>patrol</code></dt>
+        <dd>Start patrol with default waypoints.</dd>
+        <dt><code>search</code></dt>
+        <dd>Start spiral search from current position.</dd>
+        <dt><code>follow@person</code></dt>
+        <dd>Start following a &ldquo;person&rdquo; target. Any label accepted.</dd>
+        <dt><code>guard</code></dt>
+        <dd>Start guarding current position.</dd>
+        <dt><code>stop</code></dt>
+        <dd>Emergency stop &mdash; halts any active behavior and returns to IDLE.</dd>
+      </dl>
+    </div>
+
+    <div class="doc-section">
+      <h3>Configuration</h3>
+      <div class="info-box">
+        <p><strong>File:</strong> <code>ros/config/behaviors.yaml</code></p>
+        <p class="mt-1"><strong>Launch:</strong> <code>ros2 launch by_your_command behaviors.launch.py simulate:=true</code></p>
+        <p class="mt-1">Includes full navigation stack + behavior manager node.</p>
+      </div>
+    </div>
+
+    <div class="doc-section">
+      <h3>Topics Used</h3>
+      <div class="flex flex-wrap gap-1">
+        <span class="topic-tag">/grunt1/behavior_command</span><span class="topic-tag">/behavior_status</span><span class="topic-tag">/goal_pose</span><span class="topic-tag">/cmd_vel</span><span class="topic-tag">/odom</span><span class="topic-tag">/detected_target</span><span class="topic-tag">/grunt1/arm_preset</span>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
 {% block extra_head %}
 <style>
   .hud-panel { background: rgba(30, 41, 59, 0.5); backdrop-filter: blur(12px); border: 1px solid rgba(6, 182, 212, 0.2); }

@@ -2,6 +2,89 @@
 {% block title %}Telemetry{% endblock %}
 {% block page_title %}Telemetry{% endblock %}
 
+{% block help_modal %}
+<div id="helpModal" class="hidden fixed inset-0 z-50 hud-modal-backdrop flex items-start justify-center pt-20 px-4" onclick="if(event.target===this)this.classList.add('hidden')">
+  <div class="hud-modal rounded-2xl max-w-2xl w-full max-h-[75vh] overflow-y-auto p-8">
+    <div class="flex items-center justify-between mb-6">
+      <h2 class="text-lg font-semibold text-white tracking-tight">Telemetry Documentation</h2>
+      <button onclick="document.getElementById('helpModal').classList.add('hidden')" class="text-slate-500 hover:text-white transition-colors text-xl leading-none">&times;</button>
+    </div>
+
+    <div class="doc-section">
+      <h3>Overview</h3>
+      <p>The Telemetry page provides real-time data visualization of robot subsystem performance. Data streams via the TelemetryConsumer WebSocket (<code>ws/telemetry/</code>) at approximately <code>1 Hz</code>.</p>
+      <p>Charts are rendered with <code>Chart.js</code> and show rolling 60-sample windows.</p>
+    </div>
+
+    <div class="doc-section">
+      <h3>Data Source</h3>
+      <p>The TelemetryConsumer polls the <code>/motor_feedback</code> topic (std_msgs/String containing JSON) via <code>docker exec</code> inside billybot-ros2. The DDSM driver node publishes this data from motor encoder feedback.</p>
+      <div class="info-box mt-2">
+        <p>If hardware is not connected, the DDSM driver runs in <strong>simulation mode</strong> and publishes synthetic feedback data (zero speeds, simulated temperatures).</p>
+      </div>
+    </div>
+
+    <div class="doc-section">
+      <h3>Motor Speed Chart</h3>
+      <p>Displays left and right motor speeds in RPM as reported by the DDSM210 hub motor encoders.</p>
+      <dl class="doc-grid">
+        <dt>Left Speed (blue)</dt>
+        <dd>Left-side wheel pair RPM. Positive = forward. Range: -2100 to 2100 RPM.</dd>
+        <dt>Right Speed (cyan)</dt>
+        <dd>Right-side wheel pair RPM. Positive = forward. Range: -2100 to 2100 RPM.</dd>
+        <dt>Correlation</dt>
+        <dd>Equal values = straight line. Opposite values = spin in place. Differential = turning arc.</dd>
+      </dl>
+    </div>
+
+    <div class="doc-section">
+      <h3>Temperature Chart</h3>
+      <p>Motor controller temperatures from the DDSM Driver HAT. Thermal monitoring prevents motor damage from overheating.</p>
+      <dl class="doc-grid">
+        <dt>Left Temp (amber)</dt>
+        <dd>Left motor controller temperature in &deg;C.</dd>
+        <dt>Right Temp (red)</dt>
+        <dd>Right motor controller temperature in &deg;C.</dd>
+        <dt>Warning Threshold</dt>
+        <dd>Temperatures above 70&deg;C indicate sustained high-current operation. Above 85&deg;C triggers thermal protection.</dd>
+      </dl>
+    </div>
+
+    <div class="doc-section">
+      <h3>Audio Energy &amp; VAD</h3>
+      <p>Voice Activity Detection (VAD) state from the Silero VAD node. Shows audio energy levels and speech detection status.</p>
+      <dl class="doc-grid">
+        <dt>Energy Level</dt>
+        <dd>RMS audio energy from the GStreamer capture pipeline. Higher values indicate louder audio.</dd>
+        <dt>VAD State</dt>
+        <dd>Silero neural network speech detection: ACTIVE (speech detected) or SILENT (no speech).</dd>
+        <dt>Voice Pipeline</dt>
+        <dd>GStreamer &rarr; Silero VAD &rarr; WebSocket Bridge &rarr; AI Agent (OpenAI/Gemini).</dd>
+      </dl>
+    </div>
+
+    <div class="doc-section">
+      <h3>Hardware Reference</h3>
+      <dl class="doc-grid">
+        <dt>Motors</dt>
+        <dd>DDSM210 hub motors. 4WD skid-steer. JSON over UART @ 115200 baud via DDSM Driver HAT.</dd>
+        <dt>Encoder</dt>
+        <dd>4096 counts/revolution. Provides speed feedback and odometry data.</dd>
+        <dt>Protocol</dt>
+        <dd>JSON commands: <code>{"T":1, "L":&lt;rpm*10&gt;, "R":&lt;rpm*10&gt;}</code></dd>
+      </dl>
+    </div>
+
+    <div class="doc-section">
+      <h3>Topics Used</h3>
+      <div class="flex flex-wrap gap-1">
+        <span class="topic-tag">/motor_feedback</span><span class="topic-tag">/odom</span><span class="topic-tag">/joint_states</span>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
 {% block extra_head %}
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4/dist/chart.umd.min.js"></script>
 {% endblock %}

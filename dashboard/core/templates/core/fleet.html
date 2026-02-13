@@ -2,6 +2,103 @@
 {% block title %}Fleet{% endblock %}
 {% block page_title %}Fleet Overview{% endblock %}
 
+{% block help_modal %}
+<div id="helpModal" class="hidden fixed inset-0 z-50 hud-modal-backdrop flex items-start justify-center pt-20 px-4" onclick="if(event.target===this)this.classList.add('hidden')">
+  <div class="hud-modal rounded-2xl max-w-2xl w-full max-h-[75vh] overflow-y-auto p-8">
+    <div class="flex items-center justify-between mb-6">
+      <h2 class="text-lg font-semibold text-white tracking-tight">Fleet Overview Documentation</h2>
+      <button onclick="document.getElementById('helpModal').classList.add('hidden')" class="text-slate-500 hover:text-white transition-colors text-xl leading-none">&times;</button>
+    </div>
+
+    <div class="doc-section">
+      <h3>Overview</h3>
+      <p>The Fleet page provides auto-discovery and monitoring of multiple BillyBot robots operating on the same ROS 2 DDS network. Robots are identified by their ROS 2 namespace prefix.</p>
+      <p>Data refreshes every <code>15 seconds</code> via <code>/api/fleet/robots/</code> which scans <code>ros2 node list</code> and groups nodes by namespace.</p>
+    </div>
+
+    <div class="doc-section">
+      <h3>Namespace Convention</h3>
+      <p>Each robot operates under a unique namespace that prefixes all its nodes and topics:</p>
+      <dl class="doc-grid">
+        <dt>/grunt1/</dt>
+        <dd>Primary robot. Default namespace for single-robot operation.</dd>
+        <dt>/grunt2/</dt>
+        <dd>Second robot in the fleet.</dd>
+        <dt>/gruntN/</dt>
+        <dd>Additional robots follow the same pattern.</dd>
+      </dl>
+      <div class="info-box mt-3">
+        <p><strong>Launch with namespace:</strong></p>
+        <p class="mt-1"><code>ros2 launch by_your_command hardware.launch.py namespace:=grunt2</code></p>
+        <p class="mt-1">Or manually: <code>ros2 run pkg node --ros-args -r __ns:=/grunt2</code></p>
+      </div>
+    </div>
+
+    <div class="doc-section">
+      <h3>Robot Discovery</h3>
+      <p>The fleet API works by parsing the output of <code>ros2 node list</code> and grouping nodes by their first path component:</p>
+      <dl class="doc-grid">
+        <dt>Namespaced nodes</dt>
+        <dd>Nodes like <code>/grunt1/ddsm_driver_node</code> are grouped under the <code>grunt1</code> robot.</dd>
+        <dt>Standalone nodes</dt>
+        <dd>Nodes without a namespace prefix (e.g., <code>/rosout</code>) appear in the &ldquo;Standalone Nodes&rdquo; section.</dd>
+        <dt>Topic grouping</dt>
+        <dd>Topics are associated with robots if they share the same namespace prefix.</dd>
+      </dl>
+    </div>
+
+    <div class="doc-section">
+      <h3>Per-Robot Topics</h3>
+      <p>Each robot exposes its own set of namespaced topics:</p>
+      <dl class="doc-grid">
+        <dt>/gruntN/cmd_vel</dt>
+        <dd>Movement commands (Twist) for this specific robot.</dd>
+        <dt>/gruntN/odom</dt>
+        <dd>Odometry from this robot&rsquo;s wheel encoders.</dd>
+        <dt>/gruntN/arm_preset</dt>
+        <dd>Arm position commands for this robot&rsquo;s servo arm.</dd>
+        <dt>/gruntN/behavior_command</dt>
+        <dd>Behavior triggers (patrol, search, follow, guard, stop).</dd>
+        <dt>/gruntN/motor_feedback</dt>
+        <dd>Motor telemetry from this robot&rsquo;s DDSM driver.</dd>
+      </dl>
+    </div>
+
+    <div class="doc-section">
+      <h3>Robot Cards</h3>
+      <p>Each discovered robot is displayed as a card showing:</p>
+      <dl class="doc-grid">
+        <dt>Namespace</dt>
+        <dd>The robot&rsquo;s unique identifier (e.g., /grunt1).</dd>
+        <dt>Node Count</dt>
+        <dd>Number of active ROS 2 nodes under this namespace.</dd>
+        <dt>Topic Count</dt>
+        <dd>Number of topics associated with this robot.</dd>
+        <dt>Node List</dt>
+        <dd>Up to 8 active nodes shown. Excess nodes indicated with &ldquo;+ N more&rdquo;.</dd>
+        <dt>Quick Links</dt>
+        <dd><strong>Control</strong> and <strong>Telemetry</strong> buttons link to the respective pages with the namespace as a query parameter.</dd>
+      </dl>
+    </div>
+
+    <div class="doc-section">
+      <h3>DDS Discovery</h3>
+      <p>Robot discovery relies on ROS 2 DDS (Data Distribution Service) multicast discovery:</p>
+      <dl class="doc-grid">
+        <dt>RMW</dt>
+        <dd>CycloneDDS (<code>rmw_cyclonedds_cpp</code>). Configured via <code>RMW_IMPLEMENTATION</code> environment variable.</dd>
+        <dt>Domain ID</dt>
+        <dd>All robots must share the same <code>ROS_DOMAIN_ID</code> (default: 0) to discover each other.</dd>
+        <dt>Network</dt>
+        <dd>Docker <code>network_mode: host</code> ensures DDS multicast works across containers.</dd>
+        <dt>Shared Memory</dt>
+        <dd><code>/dev/shm</code> is mounted for CycloneDDS zero-copy transport between local containers.</dd>
+      </dl>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
 {% block extra_head %}
 <style>
   .hud-panel { background: rgba(30, 41, 59, 0.5); backdrop-filter: blur(12px); border: 1px solid rgba(6, 182, 212, 0.2); }

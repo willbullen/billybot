@@ -2,6 +2,97 @@
 {% block title %}Robot Control{% endblock %}
 {% block page_title %}Robot Control{% endblock %}
 
+{% block help_modal %}
+<div id="helpModal" class="hidden fixed inset-0 z-50 hud-modal-backdrop flex items-start justify-center pt-20 px-4" onclick="if(event.target===this)this.classList.add('hidden')">
+  <div class="hud-modal rounded-2xl max-w-2xl w-full max-h-[75vh] overflow-y-auto p-8">
+    <div class="flex items-center justify-between mb-6">
+      <h2 class="text-lg font-semibold text-white tracking-tight">Robot Control Documentation</h2>
+      <button onclick="document.getElementById('helpModal').classList.add('hidden')" class="text-slate-500 hover:text-white transition-colors text-xl leading-none">&times;</button>
+    </div>
+
+    <div class="doc-section">
+      <h3>Overview</h3>
+      <p>The Control page provides real-time manual control of the robot via touch-friendly joysticks, arm presets, and bearing commands. All commands are sent over WebSocket to the ROS 2 container via <code>ws/ros2/</code>.</p>
+      <p>The control interface is designed for both desktop (mouse) and mobile/tablet (touch) operation.</p>
+    </div>
+
+    <div class="doc-section">
+      <h3>Drive Joystick (Left)</h3>
+      <p>The left joystick controls robot movement by publishing <code>geometry_msgs/Twist</code> to <code>/cmd_vel</code> at 10 Hz while active.</p>
+      <dl class="doc-grid">
+        <dt>Forward/Back</dt>
+        <dd>Controls linear.x velocity (range: -1.0 to 1.0 m/s). Push up to move forward.</dd>
+        <dt>Left/Right</dt>
+        <dd>Controls angular.z velocity (range: -3.0 to 3.0 rad/s). Push right to turn right.</dd>
+        <dt>Release</dt>
+        <dd>Automatically sends zero velocity (stop command) when joystick is released.</dd>
+        <dt>Library</dt>
+        <dd>Built with <code>nipple.js</code> - a virtual joystick library for touch interfaces.</dd>
+      </dl>
+    </div>
+
+    <div class="doc-section">
+      <h3>Pan/Tilt Joystick (Right)</h3>
+      <p>Controls the camera pan/tilt head via <code>/pantilt_cmd</code> (geometry_msgs/Vector3).</p>
+      <dl class="doc-grid">
+        <dt>Pan (x-axis)</dt>
+        <dd>Horizontal camera rotation. Range maps to servo position.</dd>
+        <dt>Tilt (y-axis)</dt>
+        <dd>Vertical camera angle. Range maps to servo position.</dd>
+      </dl>
+    </div>
+
+    <div class="doc-section">
+      <h3>E-STOP</h3>
+      <div class="warn-box">
+        <p><strong>Emergency Stop</strong> immediately publishes a zero-velocity Twist message to <code>/cmd_vel</code>, halting all motor movement. The button pulses red to indicate it&rsquo;s always ready. Use this any time the robot behaves unexpectedly.</p>
+      </div>
+    </div>
+
+    <div class="doc-section">
+      <h3>Arm Presets</h3>
+      <p>Predefined arm positions published to <code>/grunt1/arm_preset</code>:</p>
+      <dl class="doc-grid">
+        <dt>Bumper</dt>
+        <dd>Arm retracted in front, low position. Protective stance. Servo values: [2048, 3072].</dd>
+        <dt>Ten-Hut</dt>
+        <dd>Home/center position. Both servos at midpoint [2048, 2048].</dd>
+        <dt>Look Up</dt>
+        <dd>Camera aimed upward. Pan center, tilt up [2048, 1024].</dd>
+        <dt>Look Out</dt>
+        <dd>Camera aimed forward at mid-height. Scanning position [2048, 1536].</dd>
+        <dt>Reach</dt>
+        <dd>Arm extended forward. Maximum reach position [2048, 512].</dd>
+      </dl>
+    </div>
+
+    <div class="doc-section">
+      <h3>Bearing Presets</h3>
+      <p>Directional bearings that modify arm pan angle. Sent as compound commands (e.g., <code>lookout@leftish</code>):</p>
+      <div class="flex flex-wrap gap-1 mt-2">
+        <span class="topic-tag">back-left</span><span class="topic-tag">full-left</span><span class="topic-tag">left</span><span class="topic-tag">leftish</span><span class="topic-tag">forward</span><span class="topic-tag">rightish</span><span class="topic-tag">right</span><span class="topic-tag">full-right</span><span class="topic-tag">back-right</span><span class="topic-tag">back</span>
+      </div>
+    </div>
+
+    <div class="doc-section">
+      <h3>Camera Feed</h3>
+      <p>Live camera stream from <code>/camera/color/compressed</code> via the CameraConsumer WebSocket (<code>ws/camera/</code>). The feed shows frames as base64-encoded JPEG images at the configured FPS.</p>
+      <p>If the camera is offline, a placeholder is shown. Launch the camera with:</p>
+      <div class="info-box mt-2">
+        <code>ros2 launch by_your_command camera.launch.py simulate:=true</code>
+      </div>
+    </div>
+
+    <div class="doc-section">
+      <h3>Topics Used</h3>
+      <div class="flex flex-wrap gap-1">
+        <span class="topic-tag">/cmd_vel</span><span class="topic-tag">/pantilt_cmd</span><span class="topic-tag">/grunt1/arm_preset</span><span class="topic-tag">/behavior_command</span><span class="topic-tag">/voice_active</span><span class="topic-tag">/camera/color/compressed</span>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
 {% block extra_head %}
 <script src="https://cdnjs.cloudflare.com/ajax/libs/nipplejs/0.10.2/nipplejs.min.js"></script>
 <style>
