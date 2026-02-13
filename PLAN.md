@@ -26,6 +26,7 @@ BillyBot is a voice-interactive robot platform combining two major systems:
 | **4** | Vision & Navigation | COMPLETE |
 | **5** | Operations & Production Hardening | COMPLETE |
 | **6** | Advanced Capabilities | COMPLETE |
+| **7** | In-Dashboard Documentation | COMPLETE |
 
 ---
 
@@ -669,6 +670,62 @@ Dashboard Arm Preset -> WebSocket -> docker exec -> ros2 topic pub /arm_preset
 | MapConsumer | `ws/map/` | SLAM map + robot pose streaming |
 | BehaviorConsumer | `ws/behaviors/` | Behavior status + command sending |
 | LogConsumer | `ws/logs/` | Container log streaming |
+
+---
+
+## Stage 7: In-Dashboard Documentation [COMPLETE]
+
+**Goal**: Every dashboard page has a rich, HUD-styled documentation modal accessible via a DOCS button in the header bar. Modals provide detailed technical reference for each page's features, API endpoints, ROS 2 topics, hardware details, and troubleshooting guidance.
+
+### Infrastructure [COMPLETE]
+
+- [x] HUD modal CSS system in `base.html`:
+  - `.hud-modal-backdrop` - fixed overlay with dark tint
+  - `.hud-modal` - glass-morphism content panel (dark slate + blur + cyan border)
+  - `.doc-section` - section container with `h3` headings
+  - `.doc-grid` - definition list grid (`dt`/`dd` pairs) for structured data
+  - `.topic-tag` - cyan badge for ROS 2 topic names
+  - `.key-tag` - keyboard shortcut badge
+  - `.info-box` - cyan-tinted informational callout
+  - `.warn-box` - amber-tinted warning callout
+- [x] `{% block help_modal %}` template block in `base.html` for per-page modal content
+- [x] DOCS button in header bar with book icon, toggles `#helpModal` visibility
+- [x] Click-outside-to-close behavior on modal backdrop
+
+### Documentation Modals (12 pages) [COMPLETE]
+
+| Page | Modal Sections |
+|------|---------------|
+| **Dashboard** | Overview, Status Cards (4), Docker Containers (4), Quick Actions, Architecture |
+| **Control** | Overview, Drive Joystick (velocity details), Pan/Tilt Joystick, E-STOP (warn-box), Arm Presets (6 with servo values), Bearing Presets (10), Camera Feed, Topics Used |
+| **Telemetry** | Overview, Data Source, Motor Speed Chart (RPM), Temperature Chart (thresholds), Audio Energy & VAD, Hardware Reference (DDSM210 protocol), Topics Used |
+| **Vision & Nav** | Overview, Camera Feed (source, FPS, sim), Navigation Map (colors, robot arrow, click-to-nav), SLAM & Map Management, Nav Controls, Nav Stack, Voice-to-Nav Commands, Topics Used |
+| **Behaviors** | Overview, States (5 detailed), Patrol Detail, Search Detail, Follow Detail, Guard Detail, Voice Commands, Configuration, Topics Used |
+| **Arm Control** | Overview, Hardware (ST3215 specs), SVG Visualization, Joint Sliders, Arm Presets (6 with servo values), Bearing System (10 bearings), Topics Used |
+| **Fleet** | Overview, Namespace Convention, Robot Discovery, Per-Robot Topics, Robot Cards, DDS Discovery (RMW, Domain ID, network, shared memory) |
+| **Topics** | Overview, Topic List panel, Topic Detail panel, Echo Message (warn-box), Common BillyBot Topics (8), API Endpoints |
+| **Nodes** | Overview, Active Nodes panel, Node Info panel (6 categories), Parameters, BillyBot Core Nodes (6), API Endpoints |
+| **Chat** | Overview, Model Selection (7 models), Session Management, Quick Commands (5), Config Panel (4 tabs), Workspace Files (5), API Endpoints (11) |
+| **Logs** | Overview, Container Selection (3), Controls (4), Log Level Coloring (4 levels), Common Log Patterns (5), Troubleshooting Tips, API Endpoint |
+| **Settings** | Overview, Containers (3 with warn-box), System Health (3 states + 4 metrics), Launch Configs (8), System Info (5 fields), Environment Variables (5), Deployment (3 modes with warn-box), API Endpoints |
+
+### Modified Files (Stage 7)
+
+| File | Changes |
+|------|---------|
+| `dashboard/core/templates/core/base.html` | Added HUD modal CSS classes, DOCS button in header, `{% block help_modal %}` |
+| `dashboard/core/templates/core/dashboard.html` | Added documentation modal |
+| `dashboard/core/templates/core/control.html` | Added documentation modal |
+| `dashboard/core/templates/core/telemetry.html` | Added documentation modal |
+| `dashboard/core/templates/core/vision.html` | Added documentation modal |
+| `dashboard/core/templates/core/behaviors.html` | Added documentation modal |
+| `dashboard/core/templates/core/arm.html` | Added documentation modal |
+| `dashboard/core/templates/core/fleet.html` | Added documentation modal |
+| `dashboard/core/templates/core/topics.html` | Added documentation modal |
+| `dashboard/core/templates/core/nodes.html` | Added documentation modal |
+| `dashboard/core/templates/core/chat.html` | Added documentation modal |
+| `dashboard/core/templates/core/logs.html` | Added documentation modal |
+| `dashboard/core/templates/core/settings.html` | Added documentation modal |
 
 ---
 
