@@ -58,6 +58,17 @@ services:
     #           capabilities: [gpu]
     cap_add:
       - SYS_NICE             # Real-time audio scheduling
+    healthcheck:
+      test: ["CMD", "bash", "-c", "source /opt/ros/humble/setup.bash && ros2 node list 2>/dev/null | head -1"]
+      interval: 30s
+      timeout: 10s
+      start_period: 30s
+      retries: 3
+    logging:
+      driver: json-file
+      options:
+        max-size: "50m"
+        max-file: "5"
     restart: unless-stopped
     command: >
       ros2 launch by_your_command oai_realtime.launch.py
@@ -90,6 +101,17 @@ services:
       - nanobot-workspace:/app/workspace
       - /var/run/docker.sock:/var/run/docker.sock:ro   # Docker API for ROS 2 tool
       - ./ros:/app/ros2_workspace:rw                    # Direct file access to ROS source
+    healthcheck:
+      test: ["CMD", "bash", "-c", "curl -sf http://localhost:18790/ || exit 1"]
+      interval: 30s
+      timeout: 5s
+      start_period: 15s
+      retries: 3
+    logging:
+      driver: json-file
+      options:
+        max-size: "20m"
+        max-file: "3"
     restart: unless-stopped
     command: gateway --port 18790
 
@@ -114,8 +136,20 @@ services:
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
       - ./dashboard:/app:rw
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/health/')"]
+      interval: 30s
+      timeout: 5s
+      start_period: 10s
+      retries: 3
+    logging:
+      driver: json-file
+      options:
+        max-size: "20m"
+        max-file: "3"
     depends_on:
-      - redis
+      redis:
+        condition: service_healthy
     restart: unless-stopped
 
   # ---------------------------------------------------------------------------
@@ -124,6 +158,12 @@ services:
   redis:
     image: redis:7-alpine
     container_name: billybot-redis
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      start_period: 5s
+      retries: 3
     restart: unless-stopped
 
 volumes:

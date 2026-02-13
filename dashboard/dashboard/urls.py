@@ -40,4 +40,7 @@ urlpatterns = [
     path("api/nav/goal/", views.api_nav_goal, name="api_nav_goal"),
     path("api/nav/cancel/", views.api_nav_cancel, name="api_nav_cancel"),
     path("api/camera/snapshot/", views.api_camera_snapshot, name="api_camera_snapshot"),
+    # Health & Observability
+    path("api/health/", views.api_health, name="api_health"),
+    path("api/system/health/", views.api_system_health, name="api_system_health"),
 ]
