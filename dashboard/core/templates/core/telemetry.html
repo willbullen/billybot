@@ -2,6 +2,89 @@
 {% block title %}Telemetry{% endblock %}
 {% block page_title %}Telemetry{% endblock %}
 
+{% block help_modal %}
+<div id="helpModal" class="hidden fixed inset-0 z-50 hud-modal-backdrop flex items-start justify-center pt-20 px-4" onclick="if(event.target===this)this.classList.add('hidden')">
+  <div class="hud-modal rounded-2xl max-w-2xl w-full max-h-[75vh] overflow-y-auto p-8">
+    <div class="flex items-center justify-between mb-6">
+      <h2 class="text-lg font-semibold text-white tracking-tight">Telemetry Documentation</h2>
+      <button onclick="document.getElementById('helpModal').classList.add('hidden')" class="text-slate-500 hover:text-white transition-colors text-xl leading-none">&times;</button>
+    </div>
+
+    <div class="doc-section">
+      <h3>Overview</h3>
+      <p>The Telemetry page provides real-time data visualization of robot subsystem performance. Data streams via the TelemetryConsumer WebSocket (<code>ws/telemetry/</code>) at approximately <code>1 Hz</code>.</p>
+      <p>Charts are rendered with <code>Chart.js</code> and show rolling 60-sample windows.</p>
+    </div>
+
+    <div class="doc-section">
+      <h3>Data Source</h3>
+      <p>The TelemetryConsumer polls the <code>/motor_feedback</code> topic (std_msgs/String containing JSON) via <code>docker exec</code> inside billybot-ros2. The DDSM driver node publishes this data from motor encoder feedback.</p>
+      <div class="info-box mt-2">
+        <p>If hardware is not connected, the DDSM driver runs in <strong>simulation mode</strong> and publishes synthetic feedback data (zero speeds, simulated temperatures).</p>
+      </div>
+    </div>
+
+    <div class="doc-section">
+      <h3>Motor Speed Chart</h3>
+      <p>Displays left and right motor speeds in RPM as reported by the DDSM210 hub motor encoders.</p>
+      <dl class="doc-grid">
+        <dt>Left Speed (blue)</dt>
+        <dd>Left-side wheel pair RPM. Positive = forward. Range: -2100 to 2100 RPM.</dd>
+        <dt>Right Speed (cyan)</dt>
+        <dd>Right-side wheel pair RPM. Positive = forward. Range: -2100 to 2100 RPM.</dd>
+        <dt>Correlation</dt>
+        <dd>Equal values = straight line. Opposite values = spin in place. Differential = turning arc.</dd>
+      </dl>
+    </div>
+
+    <div class="doc-section">
+      <h3>Temperature Chart</h3>
+      <p>Motor controller temperatures from the DDSM Driver HAT. Thermal monitoring prevents motor damage from overheating.</p>
+      <dl class="doc-grid">
+        <dt>Left Temp (amber)</dt>
+        <dd>Left motor controller temperature in &deg;C.</dd>
+        <dt>Right Temp (red)</dt>
+        <dd>Right motor controller temperature in &deg;C.</dd>
+        <dt>Warning Threshold</dt>
+        <dd>Temperatures above 70&deg;C indicate sustained high-current operation. Above 85&deg;C triggers thermal protection.</dd>
+      </dl>
+    </div>
+
+    <div class="doc-section">
+      <h3>Audio Energy &amp; VAD</h3>
+      <p>Voice Activity Detection (VAD) state from the Silero VAD node. Shows audio energy levels and speech detection status.</p>
+      <dl class="doc-grid">
+        <dt>Energy Level</dt>
+        <dd>RMS audio energy from the GStreamer capture pipeline. Higher values indicate louder audio.</dd>
+        <dt>VAD State</dt>
+        <dd>Silero neural network speech detection: ACTIVE (speech detected) or SILENT (no speech).</dd>
+        <dt>Voice Pipeline</dt>
+        <dd>GStreamer &rarr; Silero VAD &rarr; WebSocket Bridge &rarr; AI Agent (OpenAI/Gemini).</dd>
+      </dl>
+    </div>
+
+    <div class="doc-section">
+      <h3>Hardware Reference</h3>
+      <dl class="doc-grid">
+        <dt>Motors</dt>
+        <dd>DDSM210 hub motors. 4WD skid-steer. JSON over UART @ 115200 baud via DDSM Driver HAT.</dd>
+        <dt>Encoder</dt>
+        <dd>4096 counts/revolution. Provides speed feedback and odometry data.</dd>
+        <dt>Protocol</dt>
+        <dd>JSON commands: <code>{"T":1, "L":&lt;rpm*10&gt;, "R":&lt;rpm*10&gt;}</code></dd>
+      </dl>
+    </div>
+
+    <div class="doc-section">
+      <h3>Topics Used</h3>
+      <div class="flex flex-wrap gap-1">
+        <span class="topic-tag">/motor_feedback</span><span class="topic-tag">/odom</span><span class="topic-tag">/joint_states</span>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
 {% block extra_head %}
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4/dist/chart.umd.min.js"></script>
 {% endblock %}
@@ -12,10 +95,10 @@
   <!-- Top metrics row -->
   <div class="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-6">
     <template x-for="m in metrics" :key="m.label">
-      <div class="glass rounded-xl p-4">
-        <div class="text-xs font-semibold text-slate-400 uppercase tracking-wider" x-text="m.label"></div>
+      <div class="hud-panel rounded-xl p-4 hud-glow">
+        <div class="text-xs font-semibold text-cyan-400/70 uppercase tracking-wider" x-text="m.label"></div>
         <div class="text-xl font-bold mt-1" :class="m.color" x-text="m.value"></div>
-        <div class="text-xs text-slate-500 mt-0.5" x-text="m.unit"></div>
+        <div class="text-xs text-slate-500 mt-0.5 font-mono" x-text="m.unit"></div>
       </div>
     </template>
   </div>
@@ -24,24 +107,24 @@
   <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
 
     <!-- Motor speeds chart -->
-    <div class="glass rounded-xl p-5">
-      <h2 class="text-sm font-semibold text-slate-300 uppercase tracking-wider mb-4">Motor Speeds</h2>
+    <div class="hud-panel rounded-xl p-5">
+      <h2 class="hud-section-title">Motor Speeds</h2>
       <div class="relative h-64">
         <canvas id="motor-speed-chart"></canvas>
       </div>
     </div>
 
     <!-- Motor temperatures -->
-    <div class="glass rounded-xl p-5">
-      <h2 class="text-sm font-semibold text-slate-300 uppercase tracking-wider mb-4">Motor Temperatures</h2>
+    <div class="hud-panel rounded-xl p-5">
+      <h2 class="hud-section-title">Motor Temperatures</h2>
       <div class="grid grid-cols-2 gap-4 mt-4">
         <template x-for="(temp, i) in motorTemps" :key="i">
           <div class="text-center">
             <div class="relative w-24 h-24 mx-auto">
               <svg class="w-24 h-24 transform -rotate-90" viewBox="0 0 36 36">
-                <path d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" fill="none" stroke="#334155" stroke-width="3"/>
+                <path d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" fill="none" stroke="#1e293b" stroke-width="3"/>
                 <path d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" fill="none"
-                      :stroke="temp > 60 ? '#ef4444' : temp > 40 ? '#f59e0b' : '#10b981'"
+                      :stroke="temp > 60 ? '#ef4444' : temp > 40 ? '#f59e0b' : '#06b6d4'"
                       stroke-width="3" :stroke-dasharray="`${temp}, 100`" stroke-linecap="round"/>
               </svg>
               <div class="absolute inset-0 flex items-center justify-center">
@@ -55,38 +138,38 @@
     </div>
 
     <!-- Audio energy -->
-    <div class="glass rounded-xl p-5">
-      <h2 class="text-sm font-semibold text-slate-300 uppercase tracking-wider mb-4">Audio Energy</h2>
+    <div class="hud-panel rounded-xl p-5">
+      <h2 class="hud-section-title">Audio Energy</h2>
       <div class="relative h-64">
         <canvas id="audio-energy-chart"></canvas>
       </div>
     </div>
 
     <!-- VAD state -->
-    <div class="glass rounded-xl p-5">
-      <h2 class="text-sm font-semibold text-slate-300 uppercase tracking-wider mb-4">Voice Activity</h2>
+    <div class="hud-panel rounded-xl p-5">
+      <h2 class="hud-section-title">Voice Activity</h2>
       <div class="space-y-3">
-        <div class="flex items-center justify-between p-3 rounded-lg bg-slate-800/50">
+        <div class="hud-data-row">
           <span class="text-sm text-slate-400">VAD State</span>
           <span class="px-3 py-1 rounded-full text-xs font-semibold"
-                :class="vadActive ? 'bg-emerald-500/20 text-emerald-400' : 'bg-slate-600/40 text-slate-400'"
+                :class="vadActive ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30' : 'bg-slate-600/40 text-slate-400 border border-slate-600/50'"
                 x-text="vadActive ? 'Speech Detected' : 'Silent'"></span>
         </div>
-        <div class="flex items-center justify-between p-3 rounded-lg bg-slate-800/50">
+        <div class="hud-data-row">
           <span class="text-sm text-slate-400">Robot State</span>
           <span class="px-3 py-1 rounded-full text-xs font-semibold"
-                :class="robotAwake ? 'bg-brand-500/20 text-brand-400' : 'bg-amber-500/20 text-amber-400'"
+                :class="robotAwake ? 'bg-cyan-500/20 text-cyan-400 border border-cyan-500/30' : 'bg-amber-500/20 text-amber-400 border border-amber-500/30'"
                 x-text="robotAwake ? 'Awake' : 'Sleeping'"></span>
         </div>
-        <div class="flex items-center justify-between p-3 rounded-lg bg-slate-800/50">
+        <div class="hud-data-row">
           <span class="text-sm text-slate-400">AI Session</span>
           <span class="px-3 py-1 rounded-full text-xs font-semibold"
-                :class="sessionActive ? 'bg-purple-500/20 text-purple-400' : 'bg-slate-600/40 text-slate-400'"
+                :class="sessionActive ? 'bg-purple-500/20 text-purple-400 border border-purple-500/30' : 'bg-slate-600/40 text-slate-400 border border-slate-600/50'"
                 x-text="sessionActive ? 'Active' : 'Idle'"></span>
         </div>
-        <div class="flex items-center justify-between p-3 rounded-lg bg-slate-800/50">
+        <div class="hud-data-row">
           <span class="text-sm text-slate-400">Utterances</span>
-          <span class="text-sm font-mono text-brand-400" x-text="utteranceCount"></span>
+          <span class="text-sm font-mono text-cyan-400" x-text="utteranceCount"></span>
         </div>
       </div>
     </div>
@@ -100,7 +183,7 @@ function telemetryApp() {
   return {
     ws: null,
     metrics: [
-      { label: 'Audio Rate', value: '-', unit: 'Hz', color: 'text-brand-400' },
+      { label: 'Audio Rate', value: '-', unit: 'Hz', color: 'text-cyan-400' },
       { label: 'Bridge Latency', value: '-', unit: 'ms', color: 'text-emerald-400' },
       { label: 'CPU Usage', value: '-', unit: '%', color: 'text-amber-400' },
       { label: 'Memory', value: '-', unit: 'MB', color: 'text-purple-400' },
@@ -111,6 +194,7 @@ function telemetryApp() {
     robotAwake: true,
     sessionActive: false,
     utteranceCount: 0,
+    lastMotorFeedbackTime: 0,
     speedChart: null,
     audioChart: null,
     speedData: { FL: [], FR: [], RL: [], RR: [] },
@@ -120,7 +204,6 @@ function telemetryApp() {
     init() {
       this.initCharts();
       this.connectWs();
-      // Simulated data refresh for demo
       setInterval(() => this.updateDemo(), 1000);
     },
 
@@ -135,8 +218,22 @@ function telemetryApp() {
     },
 
     handleTelemetry(data) {
-      if (data.type === 'motor_feedback') {
-        this.motorTemps = data.temps || this.motorTemps;
+      if (data.type === 'motor_feedback' && data.data) {
+        const d = data.data;
+        this.lastMotorFeedbackTime = Date.now();
+        this.motorTemps = [
+          d.left_temp ?? this.motorTemps[0],
+          d.right_temp ?? this.motorTemps[1],
+          d.left_temp ?? this.motorTemps[2],
+          d.right_temp ?? this.motorTemps[3]
+        ];
+        const leftRpm = d.left_speed ?? 0, rightRpm = d.right_speed ?? 0;
+        const push = (arr, val) => { arr.push(val); if (arr.length > this.maxDataPoints) arr.shift(); };
+        ['FL','FR','RL','RR'].forEach((k, i) => push(this.speedData[k], i % 2 === 0 ? leftRpm : rightRpm));
+        if (this.speedChart) {
+          this.speedChart.data.datasets.forEach((ds, i) => { ds.data = this.speedData[Object.keys(this.speedData)[i]]; });
+          this.speedChart.update('none');
+        }
       }
       if (data.type === 'vad_state') {
         this.vadActive = data.active;
@@ -144,7 +241,7 @@ function telemetryApp() {
     },
 
     initCharts() {
-      const chartColors = { FL: '#3b82f6', FR: '#8b5cf6', RL: '#10b981', RR: '#f59e0b' };
+      const chartColors = { FL: '#06b6d4', FR: '#8b5cf6', RL: '#10b981', RR: '#f59e0b' };
       const ctx1 = document.getElementById('motor-speed-chart');
       if (ctx1) {
         this.speedChart = new Chart(ctx1, {
@@ -160,7 +257,7 @@ function telemetryApp() {
             responsive: true, maintainAspectRatio: false, animation: false,
             scales: {
               x: { display: false },
-              y: { grid: { color: '#1e293b' }, ticks: { color: '#64748b' }, title: { display: true, text: 'RPM', color: '#64748b' } }
+              y: { grid: { color: '#0f172a' }, ticks: { color: '#64748b' }, title: { display: true, text: 'RPM', color: '#64748b' } }
             },
             plugins: { legend: { labels: { color: '#94a3b8', boxWidth: 12 } } }
           }
@@ -172,13 +269,13 @@ function telemetryApp() {
           type: 'line',
           data: {
             labels: Array(this.maxDataPoints).fill(''),
-            datasets: [{ label: 'Energy', data: [], borderColor: '#3b82f6', backgroundColor: '#3b82f620', borderWidth: 1.5, pointRadius: 0, tension: 0.3, fill: true }]
+            datasets: [{ label: 'Energy', data: [], borderColor: '#06b6d4', backgroundColor: '#06b6d420', borderWidth: 1.5, pointRadius: 0, tension: 0.3, fill: true }]
           },
           options: {
             responsive: true, maintainAspectRatio: false, animation: false,
             scales: {
               x: { display: false },
-              y: { grid: { color: '#1e293b' }, ticks: { color: '#64748b' }, min: 0, max: 1 }
+              y: { grid: { color: '#0f172a' }, ticks: { color: '#64748b' }, min: 0, max: 1 }
             },
             plugins: { legend: { display: false } }
           }
@@ -187,15 +284,16 @@ function telemetryApp() {
     },
 
     updateDemo() {
-      // Demo data until real topics connected
       const pushAndTrim = (arr, val) => { arr.push(val); if (arr.length > this.maxDataPoints) arr.shift(); };
-      ['FL','FR','RL','RR'].forEach(k => pushAndTrim(this.speedData[k], Math.random() * 10));
-      pushAndTrim(this.audioData, Math.random() * 0.3);
-
-      if (this.speedChart) {
-        this.speedChart.data.datasets.forEach((ds, i) => { ds.data = this.speedData[Object.keys(this.speedData)[i]]; });
-        this.speedChart.update('none');
+      const hasRealMotor = (Date.now() - this.lastMotorFeedbackTime) < 3000;
+      if (!hasRealMotor) {
+        ['FL','FR','RL','RR'].forEach(k => pushAndTrim(this.speedData[k], Math.random() * 10));
+        if (this.speedChart) {
+          this.speedChart.data.datasets.forEach((ds, i) => { ds.data = this.speedData[Object.keys(this.speedData)[i]]; });
+          this.speedChart.update('none');
+        }
       }
+      pushAndTrim(this.audioData, Math.random() * 0.3);
       if (this.audioChart) {
         this.audioChart.data.datasets[0].data = this.audioData;
         this.audioChart.update('none');

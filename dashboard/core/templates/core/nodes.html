@@ -2,25 +2,110 @@
 {% block title %}Nodes{% endblock %}
 {% block page_title %}Nodes Manager{% endblock %}
 
+{% block help_modal %}
+<div id="helpModal" class="hidden fixed inset-0 z-50 hud-modal-backdrop flex items-start justify-center pt-20 px-4" onclick="if(event.target===this)this.classList.add('hidden')">
+  <div class="hud-modal rounded-2xl max-w-2xl w-full max-h-[75vh] overflow-y-auto p-8">
+    <div class="flex items-center justify-between mb-6">
+      <h2 class="text-lg font-semibold text-white tracking-tight">Nodes Manager Documentation</h2>
+      <button onclick="document.getElementById('helpModal').classList.add('hidden')" class="text-slate-500 hover:text-white transition-colors text-xl leading-none">&times;</button>
+    </div>
+
+    <div class="doc-section">
+      <h3>Overview</h3>
+      <p>The Nodes Manager provides a two-panel interface for inspecting all active ROS 2 nodes in the compute graph. Each node is a process that communicates via topics, services, and actions.</p>
+      <p>Node list is fetched from <code>/api/ros2/nodes/</code> which runs <code>ros2 node list</code> inside the ROS 2 container.</p>
+    </div>
+
+    <div class="doc-section">
+      <h3>Left Panel &mdash; Active Nodes</h3>
+      <p>Lists all currently running ROS 2 nodes with a green status indicator. Click any node to inspect it in the right panel.</p>
+      <dl class="doc-grid">
+        <dt>Node Path</dt>
+        <dd>Full node name including namespace (e.g., <code>/grunt1/ddsm_driver_node</code>). Namespace prefix indicates which robot the node belongs to.</dd>
+        <dt>Status Indicator</dt>
+        <dd>Green dot indicates the node is active and responding to the ROS 2 daemon.</dd>
+        <dt>Refresh</dt>
+        <dd>Click &ldquo;Refresh&rdquo; to re-query the ROS 2 graph. New or terminated nodes will appear/disappear.</dd>
+      </dl>
+    </div>
+
+    <div class="doc-section">
+      <h3>Right Panel &mdash; Node Info</h3>
+      <p>Displays detailed information about the selected node, fetched via <code>ros2 node info &lt;node_name&gt;</code>.</p>
+      <dl class="doc-grid">
+        <dt>Subscribers</dt>
+        <dd>Topics this node subscribes to, with message types. Shows what data the node consumes.</dd>
+        <dt>Publishers</dt>
+        <dd>Topics this node publishes, with message types. Shows what data the node produces.</dd>
+        <dt>Service Servers</dt>
+        <dd>Services this node offers. Includes introspection services like <code>describe_parameters</code>, <code>get_parameter_types</code>.</dd>
+        <dt>Service Clients</dt>
+        <dd>Services this node calls on other nodes.</dd>
+        <dt>Action Servers</dt>
+        <dd>Long-running action interfaces offered (e.g., <code>navigate_to_pose</code> on Nav2 nodes).</dd>
+        <dt>Action Clients</dt>
+        <dd>Actions this node sends goals to.</dd>
+      </dl>
+    </div>
+
+    <div class="doc-section">
+      <h3>Parameters</h3>
+      <p>If the selected node exposes ROS 2 parameters, they are listed in a separate section below the node info. Parameters control runtime behavior without code changes.</p>
+      <div class="info-box mt-3">
+        <p>Parameters are fetched via <code>ros2 param list &lt;node_name&gt;</code>. Common parameters include <code>use_sim_time</code>, QoS settings, and node-specific configuration values.</p>
+      </div>
+    </div>
+
+    <div class="doc-section">
+      <h3>BillyBot Core Nodes</h3>
+      <dl class="doc-grid">
+        <dt>ddsm_driver_node</dt>
+        <dd>DDSM210 motor driver. Subscribes to <code>/cmd_vel</code>, publishes <code>/motor_feedback</code> and <code>/odom</code>. Controls the 4 mecanum wheels.</dd>
+        <dt>st3215_arm_node</dt>
+        <dd>ST3215 servo driver. Subscribes to <code>/arm_command</code> and <code>/arm_preset</code>. Controls pan/tilt arm with 2 servos (IDs 1, 2).</dd>
+        <dt>audio_pipeline_node</dt>
+        <dd>Audio capture and VAD. Publishes <code>/audio_energy</code>, <code>/vad_state</code>, <code>/audio_raw</code>. Uses ALSA for microphone input.</dd>
+        <dt>command_processor_node</dt>
+        <dd>Voice command interpreter. Subscribes to <code>/voice_text</code>, publishes to <code>/cmd_vel</code>, <code>/arm_preset</code>, <code>/goal_pose</code>.</dd>
+        <dt>behavior_manager_node</dt>
+        <dd>Autonomous behavior FSM. Subscribes to <code>/behavior_command</code>, publishes <code>/behavior_status</code>, <code>/goal_pose</code>, <code>/cmd_vel</code>.</dd>
+        <dt>spatial_memory_node</dt>
+        <dd>Persistent spatial database. Subscribes to <code>/spatial_memory/store</code> and <code>/spatial_memory/query</code>.</dd>
+      </dl>
+    </div>
+
+    <div class="doc-section">
+      <h3>API Endpoints</h3>
+      <dl class="doc-grid">
+        <dt>GET /api/ros2/nodes/</dt>
+        <dd>Returns list of all active node names.</dd>
+        <dt>GET /api/ros2/node-info/</dt>
+        <dd>Returns detailed node info. Params: <code>node</code> (required) &mdash; full node path including namespace.</dd>
+      </dl>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
 {% block content %}
 <div x-data="nodesApp()" x-init="init()">
 
   <!-- Toolbar -->
   <div class="flex items-center justify-between mb-6">
-    <button @click="refresh()" class="px-4 py-2 rounded-lg bg-slate-700 hover:bg-slate-600 text-sm text-white transition-colors">Refresh</button>
-    <span class="text-sm text-slate-500" x-text="nodeList.length + ' nodes active'"></span>
+    <button @click="refresh()" class="hud-btn hud-btn-secondary">Refresh</button>
+    <span class="text-sm text-cyan-400/60 font-mono" x-text="nodeList.length + ' nodes active'"></span>
   </div>
 
   <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
 
     <!-- Nodes list -->
-    <div class="glass rounded-xl p-5">
-      <h2 class="text-sm font-semibold text-slate-300 uppercase tracking-wider mb-4">Active Nodes</h2>
+    <div class="hud-panel rounded-xl p-5">
+      <h2 class="hud-section-title">Active Nodes</h2>
       <div class="space-y-1 max-h-[600px] overflow-y-auto">
         <template x-for="node in nodeList" :key="node">
           <button @click="selectNode(node)"
                   class="w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-left text-sm transition-colors"
-                  :class="selectedNode === node ? 'bg-brand-600/20 text-brand-300 ring-1 ring-brand-500/30' : 'bg-slate-800/50 text-slate-300 hover:bg-slate-700/50'">
+                  :class="selectedNode === node ? 'bg-cyan-600/20 text-cyan-300 ring-1 ring-cyan-500/30 border border-cyan-500/20' : 'bg-slate-800/40 text-slate-300 hover:bg-slate-700/50 border border-transparent'">
             <span class="w-2 h-2 rounded-full bg-emerald-500 shrink-0"></span>
             <span class="font-mono truncate" x-text="node"></span>
           </button>
@@ -30,24 +115,24 @@
     </div>
 
     <!-- Node detail -->
-    <div class="glass rounded-xl p-5">
+    <div class="hud-panel rounded-xl p-5">
       <template x-if="selectedNode">
         <div>
-          <h2 class="text-sm font-semibold text-slate-300 uppercase tracking-wider mb-2">Node Info</h2>
-          <div class="font-mono text-brand-400 text-sm mb-4" x-text="selectedNode"></div>
+          <h2 class="hud-section-title">Node Info</h2>
+          <div class="font-mono text-cyan-400 text-sm mb-4" x-text="selectedNode"></div>
 
           <div x-show="nodeInfoLoading" class="text-sm text-slate-500 text-center py-8">Loading node info...</div>
 
           <div x-show="!nodeInfoLoading && nodeInfo">
             <!-- Raw info -->
-            <div class="p-3 rounded-lg bg-slate-900 border border-slate-700 font-mono text-xs text-slate-300 whitespace-pre-wrap max-h-80 overflow-y-auto" x-text="nodeInfo"></div>
+            <div class="p-3 rounded-lg bg-slate-900/80 border border-cyan-500/10 font-mono text-xs text-slate-300 whitespace-pre-wrap max-h-80 overflow-y-auto" x-text="nodeInfo"></div>
 
             <!-- Parameters section -->
             <div class="mt-4" x-show="nodeParams.length > 0">
-              <h3 class="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">Parameters</h3>
+              <h3 class="text-xs font-semibold text-cyan-400/50 uppercase tracking-wider mb-2">Parameters</h3>
               <div class="space-y-1 max-h-60 overflow-y-auto">
                 <template x-for="param in nodeParams" :key="param">
-                  <div class="flex items-center justify-between px-3 py-2 rounded bg-slate-800/50 text-sm">
+                  <div class="hud-data-row text-sm">
                     <span class="font-mono text-slate-300 truncate" x-text="param"></span>
                   </div>
                 </template>

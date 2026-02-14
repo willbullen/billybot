@@ -2,56 +2,412 @@
 {% block title %}Nanobot Chat{% endblock %}
 {% block page_title %}Nanobot Chat{% endblock %}
 
+{% block help_modal %}
+<div id="helpModal" class="hidden fixed inset-0 z-50 hud-modal-backdrop flex items-start justify-center pt-20 px-4" onclick="if(event.target===this)this.classList.add('hidden')">
+  <div class="hud-modal rounded-2xl max-w-2xl w-full max-h-[75vh] overflow-y-auto p-8">
+    <div class="flex items-center justify-between mb-6">
+      <h2 class="text-lg font-semibold text-white tracking-tight">Nanobot Chat Documentation</h2>
+      <button onclick="document.getElementById('helpModal').classList.add('hidden')" class="text-slate-500 hover:text-white transition-colors text-xl leading-none">&times;</button>
+    </div>
+
+    <div class="doc-section">
+      <h3>Overview</h3>
+      <p>Nanobot Chat provides a real-time conversational interface to the Nanobot AI agent running in the <code>billybot-nanobot</code> container. Nanobot is a multi-model AI gateway with tool access, persistent memory, and scheduled jobs.</p>
+      <p>Communication uses the <code>ws/chat/</code> WebSocket for streaming, session-persistent conversations.</p>
+    </div>
+
+    <div class="doc-section">
+      <h3>Model Selection</h3>
+      <p>Switch between AI models at runtime using the dropdown. The selected model is sent to the Nanobot gateway for the current session.</p>
+      <dl class="doc-grid">
+        <dt>Claude Opus 4.5</dt>
+        <dd><code>anthropic/claude-opus-4-5</code> &mdash; Most capable, best for complex reasoning and tool use.</dd>
+        <dt>Claude Sonnet 4.5</dt>
+        <dd><code>anthropic/claude-sonnet-4-5-20250929</code> &mdash; Balanced performance and cost.</dd>
+        <dt>Claude Haiku 4.5</dt>
+        <dd><code>anthropic/claude-haiku-4-5-20251001</code> &mdash; Fast, low-latency responses.</dd>
+        <dt>GPT-4o / Mini</dt>
+        <dd><code>openai/gpt-4o</code> &mdash; OpenAI multimodal. Mini variant for faster responses.</dd>
+        <dt>DeepSeek Chat</dt>
+        <dd><code>deepseek/deepseek-chat</code> &mdash; Open-weight model via DeepSeek API.</dd>
+        <dt>Gemini 2.5 Pro</dt>
+        <dd><code>gemini/gemini-2.5-pro</code> &mdash; Google multimodal with long context.</dd>
+        <dt>Llama 3.3 70B</dt>
+        <dd><code>groq/llama-3.3-70b-versatile</code> &mdash; Open-weight via Groq for ultra-low latency.</dd>
+      </dl>
+    </div>
+
+    <div class="doc-section">
+      <h3>Session Management</h3>
+      <dl class="doc-grid">
+        <dt>Session Indicator</dt>
+        <dd>Green pulse = WebSocket connected and active. Grey = disconnected (auto-reconnects after 3s).</dd>
+        <dt>New Session</dt>
+        <dd>Resets the conversation context on the Nanobot side. Clears local message history. Memory and cron jobs persist across sessions.</dd>
+        <dt>Restart Gateway</dt>
+        <dd>Restarts the entire Nanobot gateway process via <code>/api/nanobot/gateway/restart/</code>. Use when the agent is stuck or unresponsive. All active sessions are terminated.</dd>
+      </dl>
+      <div class="warn-box mt-3">
+        <p><strong>Caution:</strong> Restarting the gateway drops all active connections and resets all sessions. In-flight requests will be lost.</p>
+      </div>
+    </div>
+
+    <div class="doc-section">
+      <h3>Quick Commands</h3>
+      <p>Pre-built prompts for common ROS 2 operations. Click to send instantly.</p>
+      <dl class="doc-grid">
+        <dt>List nodes</dt>
+        <dd>Asks Nanobot to use the <code>ros2</code> tool to run <code>ros2 node list</code>.</dd>
+        <dt>List topics</dt>
+        <dd>Lists all topics in verbose mode showing message types.</dd>
+        <dt>Build workspace</dt>
+        <dd>Triggers <code>colcon build</code> for the <code>by_your_command</code> package.</dd>
+        <dt>Check health</dt>
+        <dd>Comprehensive health check of all containers and ROS 2 nodes.</dd>
+        <dt>Show logs</dt>
+        <dd>Fetches the last 30 lines of ROS 2 container logs.</dd>
+      </dl>
+    </div>
+
+    <div class="doc-section">
+      <h3>Config Panel</h3>
+      <p>Toggle the side panel with the &ldquo;Config&rdquo; button. Four tabs provide management controls:</p>
+      <dl class="doc-grid">
+        <dt>Config Tab</dt>
+        <dd>Edit workspace files (<code>AGENTS.md</code>, <code>SOUL.md</code>, <code>USER.md</code>, <code>TOOLS.md</code>, <code>IDENTITY.md</code>) that define the agent&rsquo;s system prompt, personality, and tool configuration. Shows model settings and Nanobot status.</dd>
+        <dt>Tools Tab</dt>
+        <dd>Lists built-in and custom skills available to the agent. Shows the <code>TOOLS.md</code> configuration file that defines custom tool access.</dd>
+        <dt>Cron Tab</dt>
+        <dd>Manage scheduled jobs. Jobs send messages to the agent on a schedule (every N seconds or cron expression). Useful for periodic health checks, log analysis, or automated patrols.</dd>
+        <dt>Memory Tab</dt>
+        <dd>View the agent&rsquo;s long-term memory and daily note files. Memory persists across sessions and gateway restarts.</dd>
+      </dl>
+    </div>
+
+    <div class="doc-section">
+      <h3>Workspace Files</h3>
+      <dl class="doc-grid">
+        <dt>AGENTS.md</dt>
+        <dd>Main system prompt. Defines the agent&rsquo;s role, capabilities, and behavioral rules.</dd>
+        <dt>SOUL.md</dt>
+        <dd>Personality layer. Controls tone, style, and character of responses.</dd>
+        <dt>USER.md</dt>
+        <dd>User context. Stores information about the user for personalization.</dd>
+        <dt>TOOLS.md</dt>
+        <dd>Tool definitions. Configures which tools (ros2, docker, shell) the agent can access and how.</dd>
+        <dt>IDENTITY.md</dt>
+        <dd>Agent identity. Name, avatar, and identity metadata.</dd>
+      </dl>
+    </div>
+
+    <div class="doc-section">
+      <h3>API Endpoints</h3>
+      <dl class="doc-grid">
+        <dt>WS /ws/chat/</dt>
+        <dd>WebSocket for real-time chat. Message types: <code>chat</code>, <code>set_model</code>, <code>reset_session</code>.</dd>
+        <dt>GET /api/nanobot/config/</dt>
+        <dd>Returns agent configuration including model defaults.</dd>
+        <dt>GET /api/nanobot/status/</dt>
+        <dd>Returns Nanobot gateway process status.</dd>
+        <dt>GET /api/nanobot/workspace/</dt>
+        <dd>Reads a workspace file. Param: <code>file</code>.</dd>
+        <dt>POST /api/nanobot/workspace/update/</dt>
+        <dd>Saves a workspace file. Body: <code>{ file, content }</code>.</dd>
+        <dt>GET /api/nanobot/tools/</dt>
+        <dd>Lists built-in and custom skills.</dd>
+        <dt>GET /api/nanobot/cron/</dt>
+        <dd>Lists scheduled jobs.</dd>
+        <dt>POST /api/nanobot/cron/manage/</dt>
+        <dd>Add/remove/run cron jobs. Body: <code>{ action, name, message, schedule_type, schedule_value }</code>.</dd>
+        <dt>GET /api/nanobot/memory/</dt>
+        <dd>Returns long-term memory content and daily note files.</dd>
+        <dt>POST /api/nanobot/gateway/restart/</dt>
+        <dd>Restarts the Nanobot gateway process.</dd>
+      </dl>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
 {% block content %}
-<div x-data="chatApp()" x-init="init()" class="flex flex-col h-[calc(100vh-8rem)]">
+<div x-data="chatApp()" x-init="init()" class="flex gap-4 h-[calc(100vh-8rem)]">
 
-  <!-- Chat messages -->
-  <div class="flex-1 glass rounded-xl p-5 mb-4 overflow-y-auto" id="chat-messages">
-    <div class="space-y-4">
-      <template x-for="(msg, i) in messages" :key="i">
-        <div class="flex gap-3" :class="msg.role === 'user' ? 'justify-end' : 'justify-start'">
-          <div class="max-w-[70%] rounded-xl px-4 py-3"
-               :class="msg.role === 'user' ? 'bg-brand-600 text-white' : 'bg-slate-800 text-slate-200'">
-            <div class="text-sm whitespace-pre-wrap" x-text="msg.content"></div>
-            <div class="text-xs mt-1 opacity-50" x-text="msg.time"></div>
+  <!-- Main chat area -->
+  <div class="flex-1 flex flex-col min-w-0">
+
+    <!-- Top bar: model selector + session controls -->
+    <div class="flex items-center justify-between mb-3 flex-wrap gap-2">
+      <div class="flex items-center gap-3">
+        <!-- Model selector -->
+        <div class="flex items-center gap-2">
+          <span class="text-xs text-cyan-400/60 uppercase tracking-wider">Model</span>
+          <select x-model="selectedModel" @change="switchModel()"
+                  class="hud-input text-xs !py-1.5 min-w-[200px]">
+            <template x-for="m in availableModels" :key="m.id">
+              <option :value="m.id" x-text="m.label" :selected="m.id === selectedModel"></option>
+            </template>
+          </select>
+        </div>
+        <!-- Session indicator -->
+        <div class="flex items-center gap-2 text-xs text-slate-500 font-mono">
+          <span class="w-2 h-2 rounded-full" :class="sessionActive ? 'bg-emerald-500 pulse-dot' : 'bg-slate-600'"></span>
+          <span x-text="sessionActive ? 'Session active' : 'No session'"></span>
+        </div>
+      </div>
+      <div class="flex items-center gap-2">
+        <button @click="resetSession()" class="hud-btn hud-btn-secondary text-xs !py-1.5 !px-3">
+          New Session
+        </button>
+        <button @click="restartGateway()" class="hud-btn hud-btn-warning text-xs !py-1.5 !px-3"
+                :disabled="gatewayRestarting">
+          <span x-text="gatewayRestarting ? 'Restarting...' : 'Restart Gateway'"></span>
+        </button>
+        <button @click="panelOpen = !panelOpen"
+                class="hud-btn hud-btn-secondary text-xs !py-1.5 !px-3"
+                :class="panelOpen && 'bg-cyan-600/20 text-cyan-300 border-cyan-500/30'">
+          <svg class="w-4 h-4 inline-block" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.066 2.573c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.573 1.066c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.066-2.573c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+          <span class="ml-1">Config</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- Chat messages -->
+    <div class="flex-1 hud-panel rounded-xl p-5 mb-3 overflow-y-auto" id="chat-messages">
+      <div class="space-y-4">
+        <template x-for="(msg, i) in messages" :key="i">
+          <div class="flex gap-3"
+               :class="{'justify-end': msg.role === 'user', 'justify-start': msg.role === 'assistant', 'justify-center': msg.role === 'system'}">
+            <!-- System messages -->
+            <template x-if="msg.role === 'system'">
+              <div class="text-xs text-cyan-400/50 font-mono py-1 px-3 rounded-full bg-cyan-500/5 border border-cyan-500/10" x-text="msg.content"></div>
+            </template>
+            <!-- User/assistant messages -->
+            <template x-if="msg.role !== 'system'">
+              <div class="max-w-[75%] rounded-xl px-4 py-3"
+                   :class="msg.role === 'user' ? 'bg-cyan-600/20 text-cyan-100 border border-cyan-500/30' : 'bg-slate-800/60 text-slate-200 border border-slate-700/50'">
+                <div class="text-sm whitespace-pre-wrap" x-text="msg.content"></div>
+                <div class="text-xs mt-1 opacity-50 font-mono" x-text="msg.time"></div>
+              </div>
+            </template>
+          </div>
+        </template>
+
+        <div x-show="thinking" class="flex gap-3 justify-start">
+          <div class="bg-slate-800/60 text-slate-400 rounded-xl px-4 py-3 border border-slate-700/50">
+            <div class="flex gap-1">
+              <span class="w-2 h-2 bg-cyan-500 rounded-full animate-bounce" style="animation-delay: 0ms"></span>
+              <span class="w-2 h-2 bg-cyan-500 rounded-full animate-bounce" style="animation-delay: 150ms"></span>
+              <span class="w-2 h-2 bg-cyan-500 rounded-full animate-bounce" style="animation-delay: 300ms"></span>
+            </div>
           </div>
         </div>
+
+        <div x-show="messages.length === 0 && !thinking" class="text-center text-slate-500 py-12">
+          <svg class="w-12 h-12 mx-auto mb-3 text-cyan-500/30" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"/></svg>
+          <p class="text-sm">Chat with Nanobot</p>
+          <p class="text-xs text-slate-600 mt-1">Session-persistent conversations with tool access</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- Quick commands -->
+    <div class="flex flex-wrap gap-2 mb-3">
+      <template x-for="cmd in quickCommands" :key="cmd.label">
+        <button @click="sendMessage(cmd.msg)" class="px-3 py-1.5 rounded-lg bg-slate-800/60 border border-cyan-500/10 hover:bg-cyan-600/10 hover:border-cyan-500/30 text-xs text-slate-300 transition-colors" x-text="cmd.label"></button>
       </template>
+    </div>
 
-      <div x-show="thinking" class="flex gap-3 justify-start">
-        <div class="bg-slate-800 text-slate-400 rounded-xl px-4 py-3">
-          <div class="flex gap-1">
-            <span class="w-2 h-2 bg-slate-500 rounded-full animate-bounce" style="animation-delay: 0ms"></span>
-            <span class="w-2 h-2 bg-slate-500 rounded-full animate-bounce" style="animation-delay: 150ms"></span>
-            <span class="w-2 h-2 bg-slate-500 rounded-full animate-bounce" style="animation-delay: 300ms"></span>
-          </div>
-        </div>
-      </div>
-
-      <div x-show="messages.length === 0 && !thinking" class="text-center text-slate-500 py-12">
-        <svg class="w-12 h-12 mx-auto mb-3 text-slate-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"/></svg>
-        <p class="text-sm">Chat with Nanobot</p>
-        <p class="text-xs text-slate-600 mt-1">Ask it to manage the ROS 2 system, run builds, check status...</p>
-      </div>
+    <!-- Input -->
+    <div class="flex gap-3">
+      <input x-model="input" @keydown.enter="send()" type="text"
+             placeholder="Ask nanobot anything..."
+             class="flex-1 px-4 py-3 rounded-xl hud-input">
+      <button @click="send()" :disabled="!input.trim() || thinking"
+              class="px-6 py-3 rounded-xl bg-cyan-600/20 border border-cyan-500/30 hover:bg-cyan-600/30 disabled:opacity-50 text-cyan-300 text-sm font-medium transition-colors">
+        Send
+      </button>
     </div>
   </div>
 
-  <!-- Quick commands -->
-  <div class="flex flex-wrap gap-2 mb-3">
-    <template x-for="cmd in quickCommands" :key="cmd.label">
-      <button @click="sendMessage(cmd.msg)" class="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-xs text-slate-300 transition-colors" x-text="cmd.label"></button>
-    </template>
-  </div>
+  <!-- Config/Management side panel -->
+  <div x-show="panelOpen" x-transition:enter="transition ease-out duration-200"
+       x-transition:enter-start="opacity-0 translate-x-4" x-transition:enter-end="opacity-100 translate-x-0"
+       x-transition:leave="transition ease-in duration-150"
+       x-transition:leave-start="opacity-100 translate-x-0" x-transition:leave-end="opacity-0 translate-x-4"
+       class="w-96 shrink-0 flex flex-col hud-panel rounded-xl overflow-hidden">
 
-  <!-- Input -->
-  <div class="flex gap-3">
-    <input x-model="input" @keydown.enter="send()" type="text"
-           placeholder="Ask nanobot anything..."
-           class="flex-1 px-4 py-3 rounded-xl bg-slate-800 border border-slate-700 text-sm text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-brand-500">
-    <button @click="send()" :disabled="!input.trim() || thinking"
-            class="px-6 py-3 rounded-xl bg-brand-600 hover:bg-brand-700 disabled:opacity-50 text-white text-sm font-medium transition-colors">
-      Send
-    </button>
+    <!-- Panel tabs -->
+    <div class="flex border-b border-cyan-500/20">
+      <template x-for="tab in panelTabs" :key="tab.id">
+        <button @click="activeTab = tab.id; if(tab.id === 'cron') loadCronJobs(); if(tab.id === 'memory') loadMemory();"
+                class="flex-1 px-3 py-2.5 text-xs font-medium uppercase tracking-wider transition-colors"
+                :class="activeTab === tab.id ? 'text-cyan-300 border-b-2 border-cyan-400 bg-cyan-500/10' : 'text-slate-500 hover:text-slate-300'"
+                x-text="tab.label"></button>
+      </template>
+    </div>
+
+    <!-- Tab content -->
+    <div class="flex-1 overflow-y-auto p-4">
+
+      <!-- Config Tab -->
+      <div x-show="activeTab === 'config'" class="space-y-4">
+        <div class="flex items-center justify-between mb-2">
+          <h3 class="hud-section-title !mb-0">Agent Config</h3>
+          <button @click="loadConfig()" class="text-xs text-cyan-400 hover:text-cyan-300">Reload</button>
+        </div>
+
+        <!-- Workspace files -->
+        <div class="space-y-2">
+          <template x-for="file in workspaceFiles" :key="file.name">
+            <div>
+              <button @click="editingFile === file.name ? editingFile = null : loadWorkspaceFile(file.name)"
+                      class="w-full flex items-center justify-between px-3 py-2 rounded-lg text-sm transition-colors"
+                      :class="editingFile === file.name ? 'bg-cyan-600/20 text-cyan-300 border border-cyan-500/20' : 'bg-slate-800/40 text-slate-300 hover:bg-slate-700/50 border border-transparent'">
+                <span class="font-mono text-xs" x-text="file.name"></span>
+                <span class="text-xs text-slate-500" x-text="file.desc"></span>
+              </button>
+              <div x-show="editingFile === file.name" x-transition class="mt-2">
+                <textarea x-model="fileContent"
+                          class="w-full h-48 px-3 py-2 rounded-lg bg-slate-900/80 border border-cyan-500/10 text-xs font-mono text-slate-300 resize-y focus:outline-none focus:ring-1 focus:ring-cyan-500/50"></textarea>
+                <div class="flex gap-2 mt-2">
+                  <button @click="saveWorkspaceFile(file.name)" class="hud-btn hud-btn-primary text-xs !py-1 !px-3">Save</button>
+                  <button @click="editingFile = null" class="hud-btn hud-btn-secondary text-xs !py-1 !px-3">Cancel</button>
+                </div>
+              </div>
+            </div>
+          </template>
+        </div>
+
+        <!-- Model settings -->
+        <div>
+          <h4 class="text-xs font-semibold text-cyan-400/50 uppercase tracking-wider mb-2">Model Settings</h4>
+          <div class="space-y-2">
+            <div class="hud-data-row text-xs">
+              <span class="text-slate-400">Default Model</span>
+              <span class="text-cyan-300 font-mono truncate ml-2" x-text="config?.agents?.defaults?.model || 'not set'"></span>
+            </div>
+            <div class="hud-data-row text-xs">
+              <span class="text-slate-400">Temperature</span>
+              <span class="text-cyan-300 font-mono" x-text="config?.agents?.defaults?.temperature ?? '0.7'"></span>
+            </div>
+            <div class="hud-data-row text-xs">
+              <span class="text-slate-400">Max Tokens</span>
+              <span class="text-cyan-300 font-mono" x-text="config?.agents?.defaults?.maxTokens ?? '8192'"></span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Nanobot status -->
+        <div>
+          <button @click="loadStatus()" class="hud-btn hud-btn-secondary text-xs w-full">Check Status</button>
+          <div x-show="statusOutput" class="mt-2 p-2 rounded-lg bg-slate-900/80 border border-cyan-500/10 text-xs font-mono text-slate-400 whitespace-pre-wrap max-h-40 overflow-y-auto" x-text="statusOutput"></div>
+        </div>
+      </div>
+
+      <!-- Tools Tab -->
+      <div x-show="activeTab === 'tools'" class="space-y-4">
+        <h3 class="hud-section-title">Tools & Skills</h3>
+
+        <div>
+          <h4 class="text-xs font-semibold text-cyan-400/50 uppercase tracking-wider mb-2">Built-in Skills</h4>
+          <div class="space-y-1">
+            <template x-for="skill in builtinSkills" :key="skill">
+              <div class="hud-data-row text-xs">
+                <span class="font-mono text-slate-300" x-text="skill"></span>
+                <span class="text-xs text-emerald-400">active</span>
+              </div>
+            </template>
+            <div x-show="builtinSkills.length === 0" class="text-xs text-slate-500 text-center py-4">Loading...</div>
+          </div>
+        </div>
+
+        <div>
+          <h4 class="text-xs font-semibold text-cyan-400/50 uppercase tracking-wider mb-2">Custom Skills</h4>
+          <div class="space-y-1">
+            <template x-for="skill in customSkills" :key="skill">
+              <div class="hud-data-row text-xs">
+                <span class="font-mono text-slate-300" x-text="skill"></span>
+                <span class="text-xs text-cyan-400">custom</span>
+              </div>
+            </template>
+            <div x-show="customSkills.length === 0" class="text-xs text-slate-500 text-center py-4">No custom skills</div>
+          </div>
+        </div>
+
+        <div>
+          <h4 class="text-xs font-semibold text-cyan-400/50 uppercase tracking-wider mb-2">TOOLS.md</h4>
+          <div class="p-2 rounded-lg bg-slate-900/80 border border-cyan-500/10 text-xs font-mono text-slate-400 whitespace-pre-wrap max-h-48 overflow-y-auto" x-text="toolsMd || 'No custom tools config'"></div>
+        </div>
+      </div>
+
+      <!-- Cron Tab -->
+      <div x-show="activeTab === 'cron'" class="space-y-4">
+        <div class="flex items-center justify-between">
+          <h3 class="hud-section-title !mb-0">Scheduled Jobs</h3>
+          <button @click="loadCronJobs()" class="text-xs text-cyan-400 hover:text-cyan-300">Refresh</button>
+        </div>
+
+        <!-- Existing jobs -->
+        <div class="space-y-2">
+          <template x-for="job in cronJobs" :key="job.id || job.name">
+            <div class="hud-data-row flex-col !items-start gap-2">
+              <div class="flex items-center justify-between w-full">
+                <span class="font-mono text-sm text-cyan-300" x-text="job.name || job.id"></span>
+                <div class="flex gap-1">
+                  <button @click="manageCron('run', job)" class="text-xs text-emerald-400 hover:text-emerald-300 px-1">Run</button>
+                  <button @click="manageCron('remove', job)" class="text-xs text-red-400 hover:text-red-300 px-1">Del</button>
+                </div>
+              </div>
+              <div class="text-xs text-slate-500" x-text="job.message || job.payload?.message || ''"></div>
+              <div class="text-xs text-slate-600 font-mono" x-text="job.schedule ? JSON.stringify(job.schedule) : ''"></div>
+            </div>
+          </template>
+          <div x-show="cronJobs.length === 0" class="text-xs text-slate-500 text-center py-4">No scheduled jobs</div>
+        </div>
+
+        <!-- Add new job -->
+        <div class="border-t border-cyan-500/10 pt-4">
+          <h4 class="text-xs font-semibold text-cyan-400/50 uppercase tracking-wider mb-2">Add Job</h4>
+          <div class="space-y-2">
+            <input x-model="newCron.name" placeholder="Job name" class="hud-input text-xs w-full !py-1.5">
+            <input x-model="newCron.message" placeholder="Message to send agent" class="hud-input text-xs w-full !py-1.5">
+            <div class="flex gap-2">
+              <select x-model="newCron.type" class="hud-input text-xs !py-1.5">
+                <option value="every">Every (seconds)</option>
+                <option value="cron">Cron expression</option>
+              </select>
+              <input x-model="newCron.value" :placeholder="newCron.type === 'cron' ? '0 9 * * *' : '300'"
+                     class="hud-input text-xs flex-1 !py-1.5">
+            </div>
+            <button @click="addCronJob()" class="hud-btn hud-btn-primary text-xs w-full !py-1.5">Add Job</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Memory Tab -->
+      <div x-show="activeTab === 'memory'" class="space-y-4">
+        <div class="flex items-center justify-between">
+          <h3 class="hud-section-title !mb-0">Memory</h3>
+          <button @click="loadMemory()" class="text-xs text-cyan-400 hover:text-cyan-300">Refresh</button>
+        </div>
+
+        <div>
+          <h4 class="text-xs font-semibold text-cyan-400/50 uppercase tracking-wider mb-2">Long-term Memory</h4>
+          <div class="p-3 rounded-lg bg-slate-900/80 border border-cyan-500/10 text-xs font-mono text-slate-400 whitespace-pre-wrap max-h-64 overflow-y-auto" x-text="memoryContent || 'No memory stored yet'"></div>
+        </div>
+
+        <div x-show="dailyMemoryFiles.length > 0">
+          <h4 class="text-xs font-semibold text-cyan-400/50 uppercase tracking-wider mb-2">Daily Notes</h4>
+          <div class="space-y-1">
+            <template x-for="f in dailyMemoryFiles" :key="f">
+              <div class="hud-data-row text-xs">
+                <span class="font-mono text-slate-400" x-text="f.split('/').pop()"></span>
+              </div>
+            </template>
+          </div>
+        </div>
+      </div>
+    </div>
   </div>
 </div>
 {% endblock %}
@@ -64,6 +420,59 @@ function chatApp() {
     messages: [],
     input: '',
     thinking: false,
+    sessionActive: false,
+
+    // Side panel
+    panelOpen: false,
+    activeTab: 'config',
+    panelTabs: [
+      { id: 'config', label: 'Config' },
+      { id: 'tools', label: 'Tools' },
+      { id: 'cron', label: 'Cron' },
+      { id: 'memory', label: 'Memory' },
+    ],
+
+    // Model
+    selectedModel: 'anthropic/claude-opus-4-5',
+    availableModels: [
+      { id: 'anthropic/claude-opus-4-5', label: 'Claude Opus 4.5 (Anthropic)' },
+      { id: 'anthropic/claude-sonnet-4-5-20250929', label: 'Claude Sonnet 4.5 (Anthropic)' },
+      { id: 'anthropic/claude-haiku-4-5-20251001', label: 'Claude Haiku 4.5 (Anthropic)' },
+      { id: 'openai/gpt-4o', label: 'GPT-4o (OpenAI)' },
+      { id: 'openai/gpt-4o-mini', label: 'GPT-4o Mini (OpenAI)' },
+      { id: 'deepseek/deepseek-chat', label: 'DeepSeek Chat' },
+      { id: 'gemini/gemini-2.5-pro', label: 'Gemini 2.5 Pro (Google)' },
+      { id: 'groq/llama-3.3-70b-versatile', label: 'Llama 3.3 70B (Groq)' },
+    ],
+
+    // Config
+    config: {},
+    statusOutput: '',
+    editingFile: null,
+    fileContent: '',
+    workspaceFiles: [
+      { name: 'AGENTS.md', desc: 'System prompt' },
+      { name: 'SOUL.md', desc: 'Personality' },
+      { name: 'USER.md', desc: 'User info' },
+      { name: 'TOOLS.md', desc: 'Tool config' },
+      { name: 'IDENTITY.md', desc: 'Identity' },
+    ],
+
+    // Tools
+    builtinSkills: [],
+    customSkills: [],
+    toolsMd: '',
+
+    // Cron
+    cronJobs: [],
+    newCron: { name: '', message: '', type: 'every', value: '300' },
+
+    // Memory
+    memoryContent: '',
+    dailyMemoryFiles: [],
+
+    // Gateway
+    gatewayRestarting: false,
 
     quickCommands: [
       { label: 'List nodes', msg: 'Use the ros2 tool to list all active nodes' },
@@ -75,25 +484,56 @@ function chatApp() {
 
     init() {
       this.connectWs();
+      this.loadConfig();
+      // Restore messages from sessionStorage
+      const saved = sessionStorage.getItem('nanobot_chat_messages');
+      if (saved) {
+        try { this.messages = JSON.parse(saved); } catch(e) {}
+      }
     },
 
     connectWs() {
       const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
       this.ws = new WebSocket(`${proto}//${location.host}/ws/chat/`);
+      this.ws.onopen = () => { this.sessionActive = true; };
       this.ws.onmessage = (e) => {
         const data = JSON.parse(e.data);
+
+        if (data.type === 'model_changed') {
+          this.addSystemMsg(`Model switched to ${data.model}`);
+          return;
+        }
+        if (data.type === 'session_reset') {
+          this.addSystemMsg('Session reset — new conversation started');
+          return;
+        }
+
         this.thinking = false;
         this.messages.push({
           role: 'assistant',
           content: data.content || data.message || JSON.stringify(data),
           time: new Date().toLocaleTimeString('en-GB', {hour:'2-digit', minute:'2-digit'}),
         });
+        this.saveMessages();
         this.$nextTick(() => {
           const el = document.getElementById('chat-messages');
           if (el) el.scrollTop = el.scrollHeight;
         });
       };
-      this.ws.onclose = () => setTimeout(() => this.connectWs(), 3000);
+      this.ws.onclose = () => {
+        this.sessionActive = false;
+        setTimeout(() => this.connectWs(), 3000);
+      };
+    },
+
+    addSystemMsg(text) {
+      this.messages.push({ role: 'system', content: text, time: new Date().toLocaleTimeString('en-GB', {hour:'2-digit', minute:'2-digit'}) });
+      this.saveMessages();
+    },
+
+    saveMessages() {
+      const toSave = this.messages.slice(-100);
+      sessionStorage.setItem('nanobot_chat_messages', JSON.stringify(toSave));
     },
 
     send() {
@@ -109,15 +549,157 @@ function chatApp() {
         content: text,
         time: new Date().toLocaleTimeString('en-GB', {hour:'2-digit', minute:'2-digit'}),
       });
+      this.saveMessages();
       this.thinking = true;
       if (this.ws && this.ws.readyState === WebSocket.OPEN) {
-        this.ws.send(JSON.stringify({ message: text }));
+        this.ws.send(JSON.stringify({ type: 'chat', message: text }));
       }
       this.$nextTick(() => {
         const el = document.getElementById('chat-messages');
         if (el) el.scrollTop = el.scrollHeight;
       });
-    }
+    },
+
+    switchModel() {
+      if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+        this.ws.send(JSON.stringify({ type: 'set_model', model: this.selectedModel }));
+      }
+    },
+
+    resetSession() {
+      if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+        this.ws.send(JSON.stringify({ type: 'reset_session' }));
+      }
+      this.messages = [];
+      sessionStorage.removeItem('nanobot_chat_messages');
+    },
+
+    async restartGateway() {
+      this.gatewayRestarting = true;
+      this.addSystemMsg('Restarting nanobot gateway...');
+      try {
+        const r = await fetch('/api/nanobot/gateway/restart/', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: '{}' });
+        const data = await r.json();
+        this.addSystemMsg(`Gateway restart: ${data.result || 'done'}`);
+      } catch(e) {
+        this.addSystemMsg(`Gateway restart error: ${e.message}`);
+      }
+      this.gatewayRestarting = false;
+    },
+
+    // Config methods
+    async loadConfig() {
+      try {
+        const r = await fetch('/api/nanobot/config/');
+        const data = await r.json();
+        this.config = data.config || {};
+        if (this.config?.agents?.defaults?.model) {
+          this.selectedModel = this.config.agents.defaults.model;
+        }
+      } catch(e) {}
+      this.loadTools();
+    },
+
+    async loadStatus() {
+      this.statusOutput = 'Loading...';
+      try {
+        const r = await fetch('/api/nanobot/status/');
+        const data = await r.json();
+        this.statusOutput = data.output || '(no output)';
+      } catch(e) {
+        this.statusOutput = `Error: ${e.message}`;
+      }
+    },
+
+    async loadWorkspaceFile(name) {
+      this.editingFile = name;
+      this.fileContent = 'Loading...';
+      try {
+        const r = await fetch(`/api/nanobot/workspace/?file=${encodeURIComponent(name)}`);
+        const data = await r.json();
+        this.fileContent = data.content || '';
+      } catch(e) {
+        this.fileContent = `Error: ${e.message}`;
+      }
+    },
+
+    async saveWorkspaceFile(name) {
+      try {
+        await fetch('/api/nanobot/workspace/update/', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({ file: name, content: this.fileContent }),
+        });
+        this.addSystemMsg(`Saved ${name}`);
+        this.editingFile = null;
+      } catch(e) {
+        this.addSystemMsg(`Error saving ${name}: ${e.message}`);
+      }
+    },
+
+    // Tools
+    async loadTools() {
+      try {
+        const r = await fetch('/api/nanobot/tools/');
+        const data = await r.json();
+        this.builtinSkills = data.builtin_skills || [];
+        this.customSkills = data.custom_skills || [];
+        this.toolsMd = data.tools_md || '';
+      } catch(e) {}
+    },
+
+    // Cron
+    async loadCronJobs() {
+      try {
+        const r = await fetch('/api/nanobot/cron/');
+        const data = await r.json();
+        this.cronJobs = data.jobs || [];
+      } catch(e) {}
+    },
+
+    async addCronJob() {
+      if (!this.newCron.name || !this.newCron.message) return;
+      try {
+        await fetch('/api/nanobot/cron/manage/', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({
+            action: 'add',
+            name: this.newCron.name,
+            message: this.newCron.message,
+            schedule_type: this.newCron.type,
+            schedule_value: this.newCron.value,
+          }),
+        });
+        this.newCron = { name: '', message: '', type: 'every', value: '300' };
+        await this.loadCronJobs();
+        this.addSystemMsg('Cron job added');
+      } catch(e) {
+        this.addSystemMsg(`Error: ${e.message}`);
+      }
+    },
+
+    async manageCron(action, job) {
+      try {
+        await fetch('/api/nanobot/cron/manage/', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({ action, id: job.id || job.name }),
+        });
+        await this.loadCronJobs();
+        this.addSystemMsg(`Cron job ${action}: ${job.name || job.id}`);
+      } catch(e) {}
+    },
+
+    // Memory
+    async loadMemory() {
+      try {
+        const r = await fetch('/api/nanobot/memory/');
+        const data = await r.json();
+        this.memoryContent = data.memory || '';
+        this.dailyMemoryFiles = data.daily_files || [];
+      } catch(e) {}
+    },
   }
 }
 </script>

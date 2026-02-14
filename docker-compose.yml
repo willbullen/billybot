@@ -39,12 +39,11 @@ services:
     devices:
       # Audio devices (ALSA)
       - /dev/snd:/dev/snd
-      # UART to DDSM Driver HAT (adjust device path for your Jetson)
-      # Uncomment and set the correct device:
-      # - /dev/ttyTHS1:/dev/ttyTHS1
-      # - /dev/ttyUSB0:/dev/ttyUSB0
-      # USB cameras (RealSense / ZED)
-      # - /dev/bus/usb:/dev/bus/usb
+      # Jetson: UART for DDSM Driver HAT and ST3215 servos. Uncomment on real hardware.
+      # - /dev/ttyTHS1:/dev/ttyTHS1   # DDSM210 motors (typical Jetson UART)
+      # - /dev/ttyUSB0:/dev/ttyUSB0   # ST3215 servos (USB-TTL adapter)
+      # USB cameras (RealSense / ZED) - bus/usb needed for librealsense device access
+      - /dev/bus/usb:/dev/bus/usb
       # - /dev/video0:/dev/video0
       # - /dev/video1:/dev/video1
     # GPU access for Jetson (NVIDIA Container Runtime)
@@ -59,6 +58,17 @@ services:
     #           capabilities: [gpu]
     cap_add:
       - SYS_NICE             # Real-time audio scheduling
+    healthcheck:
+      test: ["CMD", "bash", "-c", "source /opt/ros/humble/setup.bash && ros2 node list 2>/dev/null | head -1"]
+      interval: 30s
+      timeout: 10s
+      start_period: 30s
+      retries: 3
+    logging:
+      driver: json-file
+      options:
+        max-size: "50m"
+        max-file: "5"
     restart: unless-stopped
     command: >
       ros2 launch by_your_command oai_realtime.launch.py
@@ -78,6 +88,8 @@ services:
     environment:
       # pydantic_settings: NANOBOT_ prefix + __ nested delimiter
       - NANOBOT_PROVIDERS__OPENAI__API_KEY=${NANOBOT_LLM_API_KEY:-}
+      - NANOBOT_PROVIDERS__MOONSHOT__API_KEY=${MOONSHOT_API_KEY:-}
+      - NANOBOT_PROVIDERS__MOONSHOT__API_BASE=${MOONSHOT_API_BASE:-https://api.moonshot.ai/v1}
       - NANOBOT_AGENTS__DEFAULTS__MODEL=${NANOBOT_LLM_MODEL:-gpt-4o}
       - NANOBOT_CHANNELS__TELEGRAM__TOKEN=${TELEGRAM_BOT_TOKEN:-}
       - NANOBOT_CHANNELS__TELEGRAM__ENABLED=${TELEGRAM_BOT_TOKEN:+true}
@@ -89,6 +101,17 @@ services:
       - nanobot-workspace:/app/workspace
       - /var/run/docker.sock:/var/run/docker.sock:ro   # Docker API for ROS 2 tool
       - ./ros:/app/ros2_workspace:rw                    # Direct file access to ROS source
+    healthcheck:
+      test: ["CMD", "bash", "-c", "curl -sf http://localhost:18790/ || exit 1"]
+      interval: 30s
+      timeout: 5s
+      start_period: 15s
+      retries: 3
+    logging:
+      driver: json-file
+      options:
+        max-size: "20m"
+        max-file: "3"
     restart: unless-stopped
     command: gateway --port 18790
 
@@ -113,8 +136,20 @@ services:
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
       - ./dashboard:/app:rw
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/health/')"]
+      interval: 30s
+      timeout: 5s
+      start_period: 10s
+      retries: 3
+    logging:
+      driver: json-file
+      options:
+        max-size: "20m"
+        max-file: "3"
     depends_on:
-      - redis
+      redis:
+        condition: service_healthy
     restart: unless-stopped
 
   # ---------------------------------------------------------------------------
@@ -123,6 +158,12 @@ services:
   redis:
     image: redis:7-alpine
     container_name: billybot-redis
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      start_period: 5s
+      retries: 3
     restart: unless-stopped
 
 volumes:

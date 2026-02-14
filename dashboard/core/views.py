@@ -4,12 +4,17 @@ import asyncio
 import json
 import os
 import shlex
+import subprocess
+import time
 
 from django.conf import settings
 from django.http import JsonResponse
 from django.shortcuts import render
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_GET, require_POST
+
+# Track dashboard start time for uptime reporting
+_START_TIME = time.time()
 
 
 # ---------------------------------------------------------------------------
@@ -45,6 +50,22 @@ def logs(request):
     return render(request, "core/logs.html")
 
 
+def vision(request):
+    return render(request, "core/vision.html")
+
+
+def behaviors(request):
+    return render(request, "core/behaviors.html")
+
+
+def arm(request):
+    return render(request, "core/arm.html")
+
+
+def fleet(request):
+    return render(request, "core/fleet.html")
+
+
 def settings_view(request):
     return render(request, "core/settings.html", {
         "ros_domain_id": os.environ.get("ROS_DOMAIN_ID", "0"),
@@ -57,6 +78,7 @@ def settings_view(request):
 # ---------------------------------------------------------------------------
 
 CONTAINER = os.environ.get("ROS2_CONTAINER_NAME", "billybot-ros2")
+NANOBOT_CONTAINER = os.environ.get("NANOBOT_CONTAINER_NAME", "billybot-nanobot")
 
 
 def _run_sync(cmd, timeout=30):
@@ -270,3 +292,473 @@ def api_docker_restart(request):
 
     output = _run_sync(f"docker restart {shlex.quote(container)}", timeout=30)
     return JsonResponse({"result": output})
+
+
+# ---------------------------------------------------------------------------
+# Helpers: Nanobot
+# ---------------------------------------------------------------------------
+
+
+def _nanobot_exec(cmd, timeout=30):
+    """Run a command inside the nanobot container."""
+    escaped = cmd.replace("'", "'\\''")
+    full = f"docker exec {shlex.quote(NANOBOT_CONTAINER)} bash -c '{escaped}'"
+    return _run_sync(full, timeout=timeout)
+
+
+# ---------------------------------------------------------------------------
+# API views: Nanobot
+# ---------------------------------------------------------------------------
+
+
+@require_GET
+def api_nanobot_config(request):
+    """Read nanobot config from the container."""
+    output = _nanobot_exec("cat ~/.nanobot/config.json 2>/dev/null || echo '{}'")
+    try:
+        config = json.loads(output)
+    except json.JSONDecodeError:
+        config = {}
+    return JsonResponse({"config": config, "raw": output})
+
+
+@csrf_exempt
+@require_POST
+def api_nanobot_config_update(request):
+    """Update nanobot config in the container."""
+    try:
+        data = json.loads(request.body)
+    except json.JSONDecodeError:
+        return JsonResponse({"error": "Invalid JSON"}, status=400)
+
+    config_json = json.dumps(data.get("config", {}), indent=2)
+    # Write config via heredoc
+    safe_json = config_json.replace("'", "'\\''")
+    result = _nanobot_exec(
+        f"mkdir -p ~/.nanobot && echo '{safe_json}' > ~/.nanobot/config.json",
+        timeout=10,
+    )
+    return JsonResponse({"result": "ok", "output": result})
+
+
+@require_GET
+def api_nanobot_status(request):
+    """Get nanobot status (config summary, active model, provider keys)."""
+    output = _nanobot_exec("nanobot status 2>&1", timeout=15)
+    return JsonResponse({"output": output})
+
+
+@require_GET
+def api_nanobot_cron_list(request):
+    """List nanobot cron jobs."""
+    output = _nanobot_exec("nanobot cron list 2>&1", timeout=10)
+    # Also try reading the raw JSON
+    raw = _nanobot_exec("cat ~/.nanobot/cron/jobs.json 2>/dev/null || echo '[]'")
+    try:
+        jobs = json.loads(raw)
+    except json.JSONDecodeError:
+        jobs = []
+    return JsonResponse({"output": output, "jobs": jobs})
+
+
+@csrf_exempt
+@require_POST
+def api_nanobot_cron_manage(request):
+    """Add/remove/enable/disable/run a cron job."""
+    try:
+        data = json.loads(request.body)
+    except json.JSONDecodeError:
+        return JsonResponse({"error": "Invalid JSON"}, status=400)
+
+    action = data.get("action", "")
+    if action not in ("add", "remove", "enable", "disable", "run"):
+        return JsonResponse({"error": "Invalid action"}, status=400)
+
+    if action == "add":
+        name = data.get("name", "job")
+        message = data.get("message", "")
+        schedule_type = data.get("schedule_type", "every")
+        schedule_value = data.get("schedule_value", "300")
+        safe_name = shlex.quote(name)
+        safe_msg = shlex.quote(message)
+        if schedule_type == "cron":
+            cmd = f'nanobot cron add -n {safe_name} -m {safe_msg} --cron {shlex.quote(schedule_value)}'
+        else:
+            cmd = f'nanobot cron add -n {safe_name} -m {safe_msg} --every {shlex.quote(str(schedule_value))}'
+        output = _nanobot_exec(cmd, timeout=10)
+    elif action == "remove":
+        job_id = shlex.quote(data.get("id", ""))
+        output = _nanobot_exec(f"nanobot cron remove {job_id}", timeout=10)
+    elif action in ("enable", "disable"):
+        job_id = shlex.quote(data.get("id", ""))
+        output = _nanobot_exec(f"nanobot cron {action} {job_id}", timeout=10)
+    elif action == "run":
+        job_id = shlex.quote(data.get("id", ""))
+        output = _nanobot_exec(f"nanobot cron run {job_id}", timeout=30)
+    else:
+        output = ""
+
+    return JsonResponse({"result": output})
+
+
+@csrf_exempt
+@require_POST
+def api_nanobot_gateway_restart(request):
+    """Restart the nanobot gateway by restarting the container."""
+    output = _run_sync(f"docker restart {shlex.quote(NANOBOT_CONTAINER)}", timeout=30)
+    return JsonResponse({"result": output})
+
+
+@require_GET
+def api_nanobot_tools(request):
+    """List available nanobot tools."""
+    # Read workspace TOOLS.md if it exists
+    tools_md = _nanobot_exec("cat ~/.nanobot/workspace/TOOLS.md 2>/dev/null || echo ''")
+    # List skills
+    skills = _nanobot_exec("ls ~/.nanobot/workspace/skills/ 2>/dev/null || echo ''")
+    builtin_skills = _nanobot_exec("ls /app/nanobot/skills/ 2>/dev/null || echo ''")
+    return JsonResponse({
+        "tools_md": tools_md,
+        "custom_skills": [s for s in skills.strip().split("\n") if s.strip()],
+        "builtin_skills": [s for s in builtin_skills.strip().split("\n") if s.strip()],
+    })
+
+
+@require_GET
+def api_nanobot_workspace_file(request):
+    """Read a file from the nanobot workspace."""
+    filename = request.GET.get("file", "")
+    allowed = ("AGENTS.md", "SOUL.md", "USER.md", "TOOLS.md", "IDENTITY.md")
+    if filename not in allowed:
+        return JsonResponse({"error": f"File must be one of: {', '.join(allowed)}"}, status=400)
+    content = _nanobot_exec(f"cat ~/.nanobot/workspace/{shlex.quote(filename)} 2>/dev/null || echo ''")
+    return JsonResponse({"filename": filename, "content": content})
+
+
+@csrf_exempt
+@require_POST
+def api_nanobot_workspace_file_update(request):
+    """Write a file to the nanobot workspace."""
+    try:
+        data = json.loads(request.body)
+    except json.JSONDecodeError:
+        return JsonResponse({"error": "Invalid JSON"}, status=400)
+
+    filename = data.get("file", "")
+    allowed = ("AGENTS.md", "SOUL.md", "USER.md", "TOOLS.md", "IDENTITY.md")
+    if filename not in allowed:
+        return JsonResponse({"error": f"File must be one of: {', '.join(allowed)}"}, status=400)
+
+    content = data.get("content", "")
+    safe_content = content.replace("'", "'\\''")
+    result = _nanobot_exec(
+        f"mkdir -p ~/.nanobot/workspace && echo '{safe_content}' > ~/.nanobot/workspace/{filename}",
+        timeout=10,
+    )
+    return JsonResponse({"result": "ok", "output": result})
+
+
+@require_GET
+def api_nanobot_memory(request):
+    """Read nanobot memory files."""
+    memory = _nanobot_exec("cat ~/.nanobot/workspace/memory/MEMORY.md 2>/dev/null || echo ''")
+    # List daily files
+    daily_files = _nanobot_exec("ls -1 ~/.nanobot/workspace/memory/*.md 2>/dev/null || echo ''")
+    return JsonResponse({
+        "memory": memory,
+        "daily_files": [f for f in daily_files.strip().split("\n") if f.strip() and "MEMORY.md" not in f],
+    })
+
+
+# ---------------------------------------------------------------------------
+# API views: Navigation
+# ---------------------------------------------------------------------------
+
+
+@require_GET
+def api_nav_status(request):
+    """Get navigation stack status (SLAM mode, active goal, map info)."""
+    # Check if nav2 nodes are running
+    nodes_output = _ros2_exec("ros2 node list 2>/dev/null", timeout=5)
+    nav_nodes = [n.strip() for n in nodes_output.split("\n")
+                 if any(k in n for k in ["slam", "controller", "planner", "bt_navigator", "camera"])]
+
+    # Check if camera topic is active
+    topics_output = _ros2_exec("ros2 topic list 2>/dev/null", timeout=5)
+    camera_active = "/camera/color/compressed" in topics_output
+    depth_active = "/camera/depth/image_rect_raw" in topics_output
+    odom_active = "/odom" in topics_output
+    map_active = "/map" in topics_output
+
+    return JsonResponse({
+        "nav_nodes": nav_nodes,
+        "camera_active": camera_active,
+        "depth_active": depth_active,
+        "odom_active": odom_active,
+        "map_active": map_active,
+    })
+
+
+@csrf_exempt
+@require_POST
+def api_nav_goal(request):
+    """Send a navigation goal (PoseStamped) to nav2."""
+    try:
+        data = json.loads(request.body)
+    except json.JSONDecodeError:
+        return JsonResponse({"error": "Invalid JSON"}, status=400)
+
+    x = float(data.get("x", 0))
+    y = float(data.get("y", 0))
+    yaw = float(data.get("yaw", 0))
+
+    # Convert yaw to quaternion (rotation around Z)
+    import math
+    qz = math.sin(yaw / 2.0)
+    qw = math.cos(yaw / 2.0)
+
+    output = _ros2_exec(
+        f"ros2 topic pub --once /goal_pose geometry_msgs/PoseStamped "
+        f"'{{header: {{frame_id: \"map\"}}, pose: {{position: {{x: {x:.3f}, y: {y:.3f}, z: 0.0}}, "
+        f"orientation: {{x: 0.0, y: 0.0, z: {qz:.6f}, w: {qw:.6f}}}}}}}'",
+        timeout=10,
+    )
+    return JsonResponse({"result": output})
+
+
+@csrf_exempt
+@require_POST
+def api_nav_cancel(request):
+    """Cancel the current navigation goal."""
+    output = _ros2_exec(
+        "ros2 topic pub --once /navigate_to_pose/_action/cancel_goal "
+        "action_msgs/CancelGoal '{}'",
+        timeout=5,
+    )
+    return JsonResponse({"result": output})
+
+
+@csrf_exempt
+@require_POST
+def api_map_save(request):
+    """Save the current SLAM map to a file."""
+    try:
+        data = json.loads(request.body)
+    except json.JSONDecodeError:
+        data = {}
+
+    name = data.get("name", "billybot_map")
+    # Sanitize name
+    safe_name = "".join(c for c in name if c.isalnum() or c in "-_")
+    if not safe_name:
+        safe_name = "billybot_map"
+
+    output = _ros2_exec(
+        f'ros2 service call /slam_toolbox/save_map slam_toolbox/srv/SaveMap '
+        f'"{{name: {{data: /tmp/{safe_name}}}}}"',
+        timeout=15,
+    )
+    return JsonResponse({"result": output, "path": f"/tmp/{safe_name}"})
+
+
+@csrf_exempt
+@require_POST
+def api_map_load(request):
+    """Load a saved map file for localization mode."""
+    try:
+        data = json.loads(request.body)
+    except json.JSONDecodeError:
+        return JsonResponse({"error": "Invalid JSON"}, status=400)
+
+    map_file = data.get("map_file", "/tmp/billybot_map")
+    safe_file = "".join(c for c in map_file if c.isalnum() or c in "-_/.")
+    output = _ros2_exec(
+        f'ros2 service call /slam_toolbox/deserialize_map slam_toolbox/srv/DeserializePoseGraph '
+        f'"{{filename: {{data: {safe_file}}}, match_type: 1}}"',
+        timeout=15,
+    )
+    return JsonResponse({"result": output})
+
+
+@require_GET
+def api_map_list(request):
+    """List saved map files in /tmp."""
+    output = _ros2_exec("ls -1 /tmp/*.pgm /tmp/*.yaml 2>/dev/null || echo ''", timeout=5)
+    files = [f.strip() for f in output.split("\n") if f.strip() and not f.startswith("Error")]
+    # Group by base name (pgm+yaml pairs)
+    maps = {}
+    for f in files:
+        base = f.rsplit(".", 1)[0]
+        if base not in maps:
+            maps[base] = []
+        maps[base].append(f)
+    return JsonResponse({"maps": [{"name": k, "files": v} for k, v in maps.items()]})
+
+
+@require_GET
+def api_camera_snapshot(request):
+    """Get a single camera frame as base64 JPEG (for non-WebSocket clients)."""
+    import base64
+
+    cmd = (
+        f"docker exec {shlex.quote(CONTAINER)} bash -c "
+        "'source /opt/ros/humble/setup.bash && source /ros2_ws/install/setup.bash 2>/dev/null; "
+        "python3 -c \""
+        "import rclpy, base64, sys; "
+        "from sensor_msgs.msg import CompressedImage; "
+        "rclpy.init(); "
+        "node = rclpy.create_node(\\\"_snap\\\"); "
+        "msg = [None]; "
+        "sub = node.create_subscription(CompressedImage, \\\"/camera/color/compressed\\\", "
+        "lambda m: (msg.__setitem__(0, m), rclpy.shutdown()), 1); "
+        "import threading; t = threading.Timer(2.0, lambda: rclpy.try_shutdown()); t.start(); "
+        "rclpy.spin(node); t.cancel(); node.destroy_node(); "
+        "sys.stdout.buffer.write(base64.b64encode(msg[0].data) if msg[0] else b\\\"\\\"); "
+        "\"'"
+    )
+    output = _run_sync(cmd, timeout=5)
+    if output and output != "(no output)" and not output.startswith("Error"):
+        return JsonResponse({"image": output, "format": "jpeg"})
+    return JsonResponse({"image": None, "error": "No camera frame available"})
+
+
+@csrf_exempt
+@require_POST
+def api_camera_scan(request):
+    """Trigger a camera device scan via the /camera/scan ROS 2 service."""
+    output = _ros2_exec(
+        "ros2 service call /camera/scan std_srvs/srv/Trigger 2>&1",
+        timeout=15,
+    )
+    # Parse the service response
+    success = "success=True" in output or "success=true" in output
+    return JsonResponse({
+        "success": success,
+        "output": output,
+    })
+
+
+@require_GET
+def api_camera_status(request):
+    """Get camera connection status from /camera/status topic."""
+    output = _ros2_exec(
+        "ros2 topic echo /camera/status std_msgs/msg/String --once --max-wait 3 2>&1",
+        timeout=8,
+    )
+    # Try to parse the JSON from the topic message
+    import re
+    match = re.search(r'data:\s*["\'](.+?)["\']', output, re.DOTALL)
+    if match:
+        try:
+            status = json.loads(match.group(1).replace("\\n", "").replace('\\"', '"'))
+            return JsonResponse({"status": status})
+        except json.JSONDecodeError:
+            pass
+    return JsonResponse({"status": {"connected": False, "simulate": True, "error": "No status available"}})
+
+
+# ---------------------------------------------------------------------------
+# API views: Health & Observability
+# ---------------------------------------------------------------------------
+
+
+@require_GET
+def api_health(request):
+    """Health check endpoint for Docker healthcheck and monitoring."""
+    uptime = time.time() - _START_TIME
+    return JsonResponse({
+        "status": "ok",
+        "uptime": round(uptime, 1),
+        "service": "billybot-dashboard",
+    })
+
+
+@require_GET
+def api_system_health(request):
+    """Comprehensive system health check across all containers."""
+    health = {
+        "dashboard": {"status": "ok", "uptime": round(time.time() - _START_TIME, 1)},
+        "containers": [],
+        "ros2": {"nodes": [], "topics_count": 0},
+    }
+
+    # Check containers
+    output = _run_sync(
+        "docker ps -a --filter name=billybot --format '{{.Names}}|{{.Status}}|{{.State}}'",
+        timeout=5,
+    )
+    for line in output.strip().split("\n"):
+        if "|" not in line:
+            continue
+        parts = line.split("|")
+        health["containers"].append({
+            "name": parts[0].strip(),
+            "status": parts[1].strip() if len(parts) > 1 else "",
+            "running": (parts[2].strip() if len(parts) > 2 else "") == "running",
+        })
+
+    # Check ROS 2 node count
+    nodes_output = _ros2_exec("ros2 node list 2>/dev/null", timeout=5)
+    ros_nodes = [n.strip() for n in nodes_output.split("\n") if n.strip().startswith("/")]
+    health["ros2"]["nodes"] = ros_nodes
+    health["ros2"]["topics_count"] = len([
+        t for t in _ros2_exec("ros2 topic list 2>/dev/null", timeout=5).split("\n")
+        if t.strip().startswith("/")
+    ])
+
+    # Overall status
+    running_containers = sum(1 for c in health["containers"] if c["running"])
+    total_containers = len(health["containers"])
+    if running_containers == total_containers and total_containers >= 3:
+        health["overall"] = "healthy"
+    elif running_containers > 0:
+        health["overall"] = "degraded"
+    else:
+        health["overall"] = "unhealthy"
+
+    return JsonResponse(health)
+
+
+# ---------------------------------------------------------------------------
+# API views: Fleet
+# ---------------------------------------------------------------------------
+
+
+@require_GET
+def api_fleet_robots(request):
+    """Discover robots in the ROS 2 network by scanning for namespaced nodes."""
+    nodes_output = _ros2_exec("ros2 node list 2>/dev/null", timeout=5)
+    nodes_list = [n.strip() for n in nodes_output.split("\n") if n.strip().startswith("/")]
+
+    # Group nodes by namespace (e.g., /grunt1/ddsm_driver -> grunt1)
+    robots = {}
+    standalone_nodes = []
+
+    for node in nodes_list:
+        parts = node.strip("/").split("/")
+        if len(parts) >= 2:
+            ns = parts[0]
+            node_name = "/".join(parts[1:])
+            if ns not in robots:
+                robots[ns] = {"namespace": ns, "nodes": [], "topics": []}
+            robots[ns]["nodes"].append(node_name)
+        else:
+            standalone_nodes.append(parts[0])
+
+    # Get topics per namespace
+    topics_output = _ros2_exec("ros2 topic list 2>/dev/null", timeout=5)
+    topics_list = [t.strip() for t in topics_output.split("\n") if t.strip().startswith("/")]
+
+    for topic in topics_list:
+        parts = topic.strip("/").split("/")
+        if len(parts) >= 2:
+            ns = parts[0]
+            if ns in robots:
+                robots[ns]["topics"].append("/" + "/".join(parts))
+
+    return JsonResponse({
+        "robots": list(robots.values()),
+        "standalone_nodes": standalone_nodes,
+        "total_nodes": len(nodes_list),
+        "total_topics": len(topics_list),
+    })

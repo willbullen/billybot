@@ -1,0 +1,573 @@
+{% extends "core/base.html" %}
+{% block title %}Vision & Navigation{% endblock %}
+{% block page_title %}Vision & Navigation{% endblock %}
+
+{% block help_modal %}
+<div id="helpModal" class="hidden fixed inset-0 z-50 hud-modal-backdrop flex items-start justify-center pt-20 px-4" onclick="if(event.target===this)this.classList.add('hidden')">
+  <div class="hud-modal rounded-2xl max-w-2xl w-full max-h-[75vh] overflow-y-auto p-8">
+    <div class="flex items-center justify-between mb-6">
+      <h2 class="text-lg font-semibold text-white tracking-tight">Vision &amp; Navigation Documentation</h2>
+      <button onclick="document.getElementById('helpModal').classList.add('hidden')" class="text-slate-500 hover:text-white transition-colors text-xl leading-none">&times;</button>
+    </div>
+
+    <div class="doc-section">
+      <h3>Overview</h3>
+      <p>The Vision &amp; Navigation page integrates live camera streaming, SLAM mapping, and autonomous navigation into a unified interface. It connects to two WebSocket streams: <code>ws/camera/</code> for video frames and <code>ws/map/</code> for the SLAM map and robot pose.</p>
+    </div>
+
+    <div class="doc-section">
+      <h3>Camera Feed</h3>
+      <p>Streams compressed JPEG frames from the RealSense D435i camera (or simulation fallback) via the CameraConsumer WebSocket.</p>
+      <dl class="doc-grid">
+        <dt>Source Topic</dt>
+        <dd><code>/camera/color/compressed</code> (sensor_msgs/CompressedImage)</dd>
+        <dt>FPS Control</dt>
+        <dd>Adjustable 1-15 fps via dropdown. Higher FPS = more bandwidth. 5 fps recommended for remote operation.</dd>
+        <dt>Frame Grab</dt>
+        <dd>Each frame is grabbed via an inline Python rclpy subscriber inside billybot-ros2, base64-encoded, and sent over WebSocket.</dd>
+        <dt>Simulation</dt>
+        <dd>When no camera hardware is present, the camera driver generates a HUD test pattern with crosshair, grid, depth bar, and frame counter.</dd>
+      </dl>
+    </div>
+
+    <div class="doc-section">
+      <h3>Navigation Map</h3>
+      <p>Displays the SLAM-generated occupancy grid map with robot position overlay. The MapConsumer polls <code>/map</code> (nav_msgs/OccupancyGrid) and <code>/odom</code> at 1 Hz.</p>
+      <dl class="doc-grid">
+        <dt>Map Colors</dt>
+        <dd>White = free space. Black = obstacles. Gray = unknown/unexplored.</dd>
+        <dt>Robot Arrow</dt>
+        <dd>Cyan triangle showing current position and heading from odometry.</dd>
+        <dt>Click-to-Navigate</dt>
+        <dd>Click anywhere on the map to set a navigation goal. The click position is converted to world coordinates using map metadata (resolution, origin).</dd>
+        <dt>Goal Marker</dt>
+        <dd>Pulsing cyan circle shows the pending navigation goal location.</dd>
+      </dl>
+    </div>
+
+    <div class="doc-section">
+      <h3>SLAM &amp; Map Management</h3>
+      <p>SLAM Toolbox runs in <code>async_slam_toolbox_node</code> mode for real-time mapping.</p>
+      <dl class="doc-grid">
+        <dt>Save Map</dt>
+        <dd>Calls <code>/slam_toolbox/save_map</code> service. Saves .pgm + .yaml to /tmp/ in the ROS container.</dd>
+        <dt>Load Map</dt>
+        <dd>Calls <code>/slam_toolbox/deserialize_map</code> to load a previously saved map for localization.</dd>
+        <dt>Map List</dt>
+        <dd>The Maps panel shows all .pgm/.yaml files in /tmp/ that can be loaded.</dd>
+      </dl>
+    </div>
+
+    <div class="doc-section">
+      <h3>Navigation Controls</h3>
+      <p>Manual navigation goal input using X, Y, and Yaw fields. Goals are published as <code>geometry_msgs/PoseStamped</code> to <code>/goal_pose</code>.</p>
+      <dl class="doc-grid">
+        <dt>X / Y</dt>
+        <dd>World coordinates in meters relative to the map frame origin.</dd>
+        <dt>Yaw</dt>
+        <dd>Goal orientation in radians. 0 = facing positive X. &pi;/2 = facing positive Y.</dd>
+        <dt>Cancel</dt>
+        <dd>Cancels the active navigation goal via <code>/navigate_to_pose/_action/cancel_goal</code>.</dd>
+      </dl>
+    </div>
+
+    <div class="doc-section">
+      <h3>Navigation Stack</h3>
+      <div class="info-box">
+        <p><strong>Launch:</strong> <code>ros2 launch by_your_command navigation.launch.py simulate:=true</code></p>
+        <p class="mt-1">Includes: hardware drivers + camera + depthimage_to_laserscan + SLAM Toolbox + Nav2 (DWB controller, NavFn planner, BT navigator, lifecycle manager).</p>
+      </div>
+    </div>
+
+    <div class="doc-section">
+      <h3>Voice-to-Nav Commands</h3>
+      <p>The command_processor node routes voice commands to navigation goals:</p>
+      <dl class="doc-grid">
+        <dt><code>goto@kitchen</code></dt>
+        <dd>Navigate to a named location. Available: home, kitchen, bedroom, living, door, garage, office, charging.</dd>
+        <dt><code>goto@1.5,2.0</code></dt>
+        <dd>Navigate to specific coordinates (x, y). Optional yaw: <code>goto@1.5,2.0,1.57</code></dd>
+        <dt><code>patrol</code></dt>
+        <dd>Cycle through predefined patrol waypoints continuously.</dd>
+      </dl>
+    </div>
+
+    <div class="doc-section">
+      <h3>Topics Used</h3>
+      <div class="flex flex-wrap gap-1">
+        <span class="topic-tag">/camera/color/compressed</span><span class="topic-tag">/camera/depth/image_rect_raw</span><span class="topic-tag">/camera/camera_info</span><span class="topic-tag">/map</span><span class="topic-tag">/odom</span><span class="topic-tag">/goal_pose</span><span class="topic-tag">/scan</span>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_head %}
+<style>
+  .hud-panel {
+    background: rgba(30, 41, 59, 0.5);
+    backdrop-filter: blur(12px);
+    border: 1px solid rgba(6, 182, 212, 0.2);
+  }
+  .hud-panel:hover { border-color: rgba(6, 182, 212, 0.35); }
+  .map-canvas {
+    background: repeating-linear-gradient(
+      0deg, rgba(6, 182, 212, 0.03) 0px, transparent 1px, transparent 20px
+    ), repeating-linear-gradient(
+      90deg, rgba(6, 182, 212, 0.03) 0px, transparent 1px, transparent 20px
+    );
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+<div x-data="visionApp()" x-init="init()">
+
+  <!-- Status bar -->
+  <div class="flex items-center justify-between mb-6 flex-wrap gap-3">
+    <div class="flex items-center gap-4 flex-wrap">
+      <div class="flex items-center gap-2 text-sm">
+        <span class="w-2.5 h-2.5 rounded-full" :class="cameraActive ? 'bg-emerald-500 pulse-dot' : 'bg-slate-600'"></span>
+        <span class="text-slate-400" x-text="cameraActive ? 'Camera active' : 'Camera offline'"></span>
+      </div>
+      <div class="flex items-center gap-2 text-sm">
+        <span class="w-2.5 h-2.5 rounded-full" :class="depthActive ? 'bg-emerald-500 pulse-dot' : 'bg-slate-600'"></span>
+        <span class="text-slate-400" x-text="depthActive ? 'Depth active' : 'Depth offline'"></span>
+      </div>
+      <div class="flex items-center gap-2 text-sm">
+        <span class="w-2.5 h-2.5 rounded-full" :class="mapActive ? 'bg-cyan-400 pulse-dot' : 'bg-slate-600'"></span>
+        <span class="text-slate-400" x-text="mapActive ? 'SLAM active' : 'SLAM offline'"></span>
+      </div>
+      <div class="flex items-center gap-2 text-sm">
+        <span class="w-2.5 h-2.5 rounded-full" :class="odomActive ? 'bg-cyan-400 pulse-dot' : 'bg-slate-600'"></span>
+        <span class="text-slate-400" x-text="odomActive ? 'Odom active' : 'Odom offline'"></span>
+      </div>
+    </div>
+    <div class="flex items-center gap-2">
+      <button @click="refreshStatus()" class="hud-btn hud-btn-secondary text-xs">Refresh Status</button>
+      <button @click="cancelNav()" class="hud-btn hud-btn-danger text-xs" x-show="navigating">Cancel Nav</button>
+    </div>
+  </div>
+
+  <!-- Main grid -->
+  <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+
+    <!-- Camera feed -->
+    <div class="hud-panel rounded-xl p-5">
+      <div class="flex items-center justify-between mb-4">
+        <h2 class="hud-section-title mb-0">Camera Feed</h2>
+        <div class="flex items-center gap-2">
+          <select x-model="cameraFps" @change="setCameraFps()" class="hud-input text-xs py-1 px-2">
+            <option value="1">1 fps</option>
+            <option value="3">3 fps</option>
+            <option value="5">5 fps</option>
+            <option value="10">10 fps</option>
+            <option value="15">15 fps</option>
+          </select>
+          <span class="w-2 h-2 rounded-full" :class="camWsConnected ? 'bg-emerald-500' : 'bg-slate-600'"></span>
+        </div>
+      </div>
+      <div class="bg-slate-800/60 rounded-lg border border-cyan-500/20 overflow-hidden relative" style="aspect-ratio: 4/3;">
+        <img x-show="cameraFrame" :src="'data:image/jpeg;base64,' + cameraFrame" class="w-full h-full object-contain" alt="Camera">
+        <div x-show="!cameraFrame" class="absolute inset-0 flex items-center justify-center">
+          <div class="text-center text-slate-500">
+            <svg class="w-16 h-16 mx-auto mb-3 text-slate-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"/></svg>
+            <p class="text-sm">No camera feed</p>
+            <p class="text-xs text-slate-600 mt-1">Launch: ros2 launch by_your_command camera.launch.py</p>
+          </div>
+        </div>
+        <!-- Frame counter -->
+        <div x-show="cameraFrame" class="absolute bottom-2 left-2 text-xs font-mono text-cyan-400/70 bg-slate-900/80 px-2 py-0.5 rounded">
+          <span x-text="frameCount"></span> frames
+        </div>
+      </div>
+    </div>
+
+    <!-- Map / Navigation -->
+    <div class="hud-panel rounded-xl p-5">
+      <div class="flex items-center justify-between mb-4">
+        <h2 class="hud-section-title mb-0">Navigation Map</h2>
+        <div class="flex items-center gap-2">
+          <span class="w-2 h-2 rounded-full" :class="mapWsConnected ? 'bg-emerald-500' : 'bg-slate-600'"></span>
+          <button @click="saveMap()" class="hud-btn hud-btn-secondary text-xs py-1">Save Map</button>
+          <button @click="showMapManager = !showMapManager" class="hud-btn hud-btn-secondary text-xs py-1">Maps</button>
+        </div>
+      </div>
+      <div class="map-canvas bg-slate-800/60 rounded-lg border border-cyan-500/20 relative overflow-hidden" style="aspect-ratio: 4/3;"
+           @click="handleMapClick($event)">
+        <!-- Map image from SLAM (if available) -->
+        <img x-show="mapImage" :src="'data:image/png;base64,' + mapImage" class="w-full h-full object-contain" alt="Map">
+
+        <!-- Placeholder grid -->
+        <div x-show="!mapImage" class="absolute inset-0 flex items-center justify-center">
+          <div class="text-center text-slate-500">
+            <svg class="w-16 h-16 mx-auto mb-3 text-slate-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1" d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l5.447 2.724A1 1 0 0021 18.382V7.618a1 1 0 00-1.447-.894L15 4m0 13V4m0 0L9 7"/></svg>
+            <p class="text-sm">No map available</p>
+            <p class="text-xs text-slate-600 mt-1">SLAM will generate a map when active</p>
+          </div>
+        </div>
+
+        <!-- Robot position indicator -->
+        <div x-show="robotPose" class="absolute w-4 h-4 -ml-2 -mt-2 pointer-events-none"
+             :style="`left: ${robotScreenX}px; top: ${robotScreenY}px; transform: rotate(${robotYaw}rad);`">
+          <svg viewBox="0 0 16 16" class="w-full h-full">
+            <polygon points="8,0 14,14 8,10 2,14" fill="#06b6d4" fill-opacity="0.8" stroke="#0e7490" stroke-width="1"/>
+          </svg>
+        </div>
+
+        <!-- Click-to-navigate marker -->
+        <div x-show="goalMarker" class="absolute w-5 h-5 -ml-2.5 -mt-2.5 pointer-events-none"
+             :style="`left: ${goalMarker?.x}px; top: ${goalMarker?.y}px;`">
+          <div class="w-full h-full rounded-full border-2 border-cyan-400 bg-cyan-400/20 animate-ping"></div>
+          <div class="absolute inset-0 w-full h-full rounded-full border-2 border-cyan-400 bg-cyan-400/30"></div>
+        </div>
+
+        <!-- Instructions overlay -->
+        <div class="absolute bottom-2 right-2 text-xs font-mono text-slate-500 bg-slate-900/80 px-2 py-0.5 rounded">
+          Click to set nav goal
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Map Manager Overlay -->
+  <div x-show="showMapManager" x-transition class="hud-panel rounded-xl p-5 mt-6">
+    <div class="flex items-center justify-between mb-4">
+      <h2 class="hud-section-title mb-0">Saved Maps</h2>
+      <button @click="showMapManager = false" class="text-slate-500 hover:text-slate-300">&times;</button>
+    </div>
+    <div class="space-y-2">
+      <template x-if="savedMaps.length === 0">
+        <p class="text-xs text-slate-500">No saved maps found. Use "Save Map" to save the current SLAM map.</p>
+      </template>
+      <template x-for="m in savedMaps" :key="m.name">
+        <div class="flex items-center justify-between bg-slate-800/60 rounded-lg px-3 py-2">
+          <span class="text-sm text-slate-300 font-mono" x-text="m.name"></span>
+          <div class="flex items-center gap-2">
+            <span class="text-xs text-slate-500" x-text="m.files.length + ' files'"></span>
+            <button @click="loadMap(m.name)" class="hud-btn hud-btn-primary text-xs py-0.5 px-2">Load</button>
+          </div>
+        </div>
+      </template>
+    </div>
+    <div class="mt-4 pt-3 border-t border-slate-700/50 flex gap-2">
+      <input type="text" x-model="saveMapName" placeholder="Map name" class="hud-input text-xs py-1 flex-1">
+      <button @click="saveMap()" class="hud-btn hud-btn-primary text-xs">Save Current</button>
+      <button @click="refreshMaps()" class="hud-btn hud-btn-secondary text-xs">Refresh</button>
+    </div>
+  </div>
+
+  <!-- Bottom panels -->
+  <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mt-6">
+
+    <!-- Navigation controls -->
+    <div class="hud-panel rounded-xl p-5">
+      <h2 class="hud-section-title">Navigation Controls</h2>
+      <div class="space-y-3">
+        <div class="hud-data-row">
+          <span class="text-sm text-slate-400">Goal X</span>
+          <input type="number" x-model="goalX" step="0.1" class="hud-input w-24 text-xs py-1 text-right">
+        </div>
+        <div class="hud-data-row">
+          <span class="text-sm text-slate-400">Goal Y</span>
+          <input type="number" x-model="goalY" step="0.1" class="hud-input w-24 text-xs py-1 text-right">
+        </div>
+        <div class="hud-data-row">
+          <span class="text-sm text-slate-400">Goal Yaw</span>
+          <input type="number" x-model="goalYaw" step="0.1" class="hud-input w-24 text-xs py-1 text-right">
+        </div>
+        <div class="flex gap-2 pt-2">
+          <button @click="sendNavGoal()" class="hud-btn hud-btn-primary flex-1 text-xs">Navigate</button>
+          <button @click="cancelNav()" class="hud-btn hud-btn-danger flex-1 text-xs">Cancel</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Active nodes -->
+    <div class="hud-panel rounded-xl p-5">
+      <h2 class="hud-section-title">Navigation Nodes</h2>
+      <div class="space-y-2">
+        <template x-if="navNodes.length === 0">
+          <p class="text-xs text-slate-500">No navigation nodes detected. Launch the navigation stack first.</p>
+        </template>
+        <template x-for="node in navNodes" :key="node">
+          <div class="flex items-center gap-2 text-sm">
+            <span class="w-2 h-2 rounded-full bg-emerald-500"></span>
+            <span class="text-slate-300 font-mono text-xs" x-text="node"></span>
+          </div>
+        </template>
+      </div>
+      <div class="mt-4 pt-3 border-t border-slate-700/50">
+        <p class="text-xs text-slate-500 mb-2">Launch commands:</p>
+        <div class="space-y-1">
+          <code class="block text-xs text-cyan-400/70 bg-slate-800/60 rounded px-2 py-1">ros2 launch by_your_command camera.launch.py</code>
+          <code class="block text-xs text-cyan-400/70 bg-slate-800/60 rounded px-2 py-1">ros2 launch by_your_command navigation.launch.py</code>
+        </div>
+      </div>
+    </div>
+
+    <!-- Camera info -->
+    <div class="hud-panel rounded-xl p-5">
+      <h2 class="hud-section-title">Camera Info</h2>
+      <div class="space-y-2">
+        <div class="hud-data-row">
+          <span class="text-sm text-slate-400">Status</span>
+          <span class="text-sm font-mono" :class="cameraActive ? 'text-emerald-400' : 'text-slate-500'" x-text="cameraActive ? 'ONLINE' : 'OFFLINE'"></span>
+        </div>
+        <div class="hud-data-row">
+          <span class="text-sm text-slate-400">Depth</span>
+          <span class="text-sm font-mono" :class="depthActive ? 'text-emerald-400' : 'text-slate-500'" x-text="depthActive ? 'ONLINE' : 'OFFLINE'"></span>
+        </div>
+        <div class="hud-data-row">
+          <span class="text-sm text-slate-400">Stream FPS</span>
+          <span class="text-sm font-mono text-cyan-300" x-text="cameraFps"></span>
+        </div>
+        <div class="hud-data-row">
+          <span class="text-sm text-slate-400">Frames</span>
+          <span class="text-sm font-mono text-cyan-300" x-text="frameCount"></span>
+        </div>
+      </div>
+      <div class="mt-4 pt-3 border-t border-slate-700/50">
+        <h3 class="text-xs font-semibold text-slate-500 mb-2">Topics</h3>
+        <div class="space-y-1 text-xs font-mono text-cyan-400/60">
+          <p>/camera/color/image_raw</p>
+          <p>/camera/color/compressed</p>
+          <p>/camera/depth/image_rect_raw</p>
+          <p>/camera/camera_info</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+function visionApp() {
+  return {
+    // Camera WebSocket
+    camWs: null,
+    camWsConnected: false,
+    cameraFrame: null,
+    cameraFps: '5',
+    frameCount: 0,
+
+    // Map WebSocket
+    mapWs: null,
+    mapWsConnected: false,
+    mapInfo: null,
+
+    // Nav status
+    cameraActive: false,
+    depthActive: false,
+    odomActive: false,
+    mapActive: false,
+    navNodes: [],
+    navigating: false,
+
+    // Map
+    mapImage: null,
+    robotPose: null,
+    robotScreenX: 0,
+    robotScreenY: 0,
+    robotYaw: 0,
+    goalMarker: null,
+
+    // Map manager
+    showMapManager: false,
+    savedMaps: [],
+    saveMapName: 'billybot_map',
+
+    // Nav goal
+    goalX: 0,
+    goalY: 0,
+    goalYaw: 0,
+
+    init() {
+      this.connectCameraWs();
+      this.connectMapWs();
+      this.refreshStatus();
+      this.refreshMaps();
+      setInterval(() => this.refreshStatus(), 10000);
+    },
+
+    connectCameraWs() {
+      const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
+      this.camWs = new WebSocket(`${proto}//${location.host}/ws/camera/`);
+      this.camWs.onopen = () => {
+        this.camWsConnected = true;
+        this.setCameraFps();
+      };
+      this.camWs.onmessage = (e) => {
+        try {
+          const data = JSON.parse(e.data);
+          if (data.type === 'frame' && data.data) {
+            this.cameraFrame = data.data;
+            this.frameCount++;
+          }
+        } catch(err) {}
+      };
+      this.camWs.onclose = () => {
+        this.camWsConnected = false;
+        this.cameraFrame = null;
+        setTimeout(() => this.connectCameraWs(), 5000);
+      };
+      this.camWs.onerror = () => { this.camWsConnected = false; };
+    },
+
+    setCameraFps() {
+      if (this.camWs && this.camWs.readyState === WebSocket.OPEN) {
+        this.camWs.send(JSON.stringify({ fps: parseInt(this.cameraFps) }));
+      }
+    },
+
+    connectMapWs() {
+      const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
+      this.mapWs = new WebSocket(`${proto}//${location.host}/ws/map/`);
+      this.mapWs.onopen = () => { this.mapWsConnected = true; };
+      this.mapWs.onmessage = (e) => {
+        try {
+          const data = JSON.parse(e.data);
+          if (data.type === 'map_update') {
+            if (data.map) {
+              this.mapImage = data.map;
+              this.mapInfo = data.map_info || null;
+            }
+            if (data.pose && this.mapInfo) {
+              this.robotPose = data.pose;
+              this.updateRobotPosition();
+            }
+          }
+        } catch(err) {}
+      };
+      this.mapWs.onclose = () => {
+        this.mapWsConnected = false;
+        setTimeout(() => this.connectMapWs(), 5000);
+      };
+      this.mapWs.onerror = () => { this.mapWsConnected = false; };
+    },
+
+    updateRobotPosition() {
+      if (!this.robotPose || !this.mapInfo) return;
+      const info = this.mapInfo;
+      // Convert world coords to pixel coords on the map image
+      const px = (this.robotPose.x - info.ox) / info.res;
+      const py = info.h - (this.robotPose.y - info.oy) / info.res;
+      // Scale to the rendered element size (aspect-ratio 4:3 container)
+      const el = this.$el.querySelector('.map-canvas');
+      if (!el) return;
+      const scaleX = el.clientWidth / info.w;
+      const scaleY = el.clientHeight / info.h;
+      this.robotScreenX = px * scaleX;
+      this.robotScreenY = py * scaleY;
+      this.robotYaw = -this.robotPose.yaw;  // Flip for screen coords
+    },
+
+    async refreshMaps() {
+      try {
+        const resp = await fetch('/api/map/list/');
+        const data = await resp.json();
+        this.savedMaps = data.maps || [];
+      } catch(e) {}
+    },
+
+    async loadMap(name) {
+      try {
+        const resp = await fetch('/api/map/load/', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ map_file: name }),
+        });
+        const data = await resp.json();
+        alert(data.result || 'Map load requested');
+      } catch(e) {
+        alert('Failed to load map');
+      }
+    },
+
+    async refreshStatus() {
+      try {
+        const resp = await fetch('/api/nav/status/');
+        const data = await resp.json();
+        this.navNodes = data.nav_nodes || [];
+        this.cameraActive = data.camera_active || false;
+        this.depthActive = data.depth_active || false;
+        this.odomActive = data.odom_active || false;
+        this.mapActive = data.map_active || false;
+      } catch(e) {}
+    },
+
+    handleMapClick(event) {
+      const rect = event.currentTarget.getBoundingClientRect();
+      const x = event.clientX - rect.left;
+      const y = event.clientY - rect.top;
+
+      this.goalMarker = { x, y };
+
+      if (this.mapInfo) {
+        // Use real map metadata to convert pixel to world coords
+        const scaleX = rect.width / this.mapInfo.w;
+        const scaleY = rect.height / this.mapInfo.h;
+        const px = x / scaleX;
+        const py = y / scaleY;
+        this.goalX = (px * this.mapInfo.res + this.mapInfo.ox).toFixed(2);
+        this.goalY = ((this.mapInfo.h - py) * this.mapInfo.res + this.mapInfo.oy).toFixed(2);
+      } else {
+        // Fallback: approximate -5 to 5 meter range
+        this.goalX = (((x / rect.width) - 0.5) * 10).toFixed(2);
+        this.goalY = (((0.5 - y / rect.height)) * 10).toFixed(2);
+      }
+      this.goalYaw = 0;
+    },
+
+    async sendNavGoal() {
+      this.navigating = true;
+      try {
+        const resp = await fetch('/api/nav/goal/', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            x: parseFloat(this.goalX),
+            y: parseFloat(this.goalY),
+            yaw: parseFloat(this.goalYaw),
+          }),
+        });
+        const data = await resp.json();
+        if (data.error) {
+          console.error('Nav goal error:', data.error);
+        }
+      } catch(e) {
+        console.error('Nav goal failed:', e);
+      }
+    },
+
+    async cancelNav() {
+      this.navigating = false;
+      this.goalMarker = null;
+      try {
+        await fetch('/api/nav/cancel/', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: '{}',
+        });
+      } catch(e) {}
+    },
+
+    async saveMap() {
+      try {
+        const resp = await fetch('/api/map/save/', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name: this.saveMapName || 'billybot_map' }),
+        });
+        const data = await resp.json();
+        alert(data.result || `Map saved to ${data.path}`);
+        this.refreshMaps();
+      } catch(e) {
+        alert('Failed to save map');
+      }
+    },
+  }
+}
+</script>
+{% endblock %}

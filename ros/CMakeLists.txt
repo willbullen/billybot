@@ -12,6 +12,10 @@ find_package(rclcpp REQUIRED)
 find_package(rosidl_default_generators REQUIRED)
 find_package(std_msgs REQUIRED)
 find_package(audio_common_msgs REQUIRED)
+find_package(geometry_msgs REQUIRED)
+find_package(nav_msgs REQUIRED)
+find_package(sensor_msgs REQUIRED)
+find_package(tf2_ros REQUIRED)
 
 # Generate custom messages
 rosidl_generate_interfaces(${PROJECT_NAME}
@@ -25,6 +29,7 @@ ament_python_install_package(audio)
 ament_python_install_package(interactions)
 ament_python_install_package(ros_ai_bridge)
 ament_python_install_package(agents)
+ament_python_install_package(hardware)
 ament_python_install_package(tests)
 
 # Create symlinks for console scripts in lib/${PROJECT_NAME}
@@ -92,6 +97,36 @@ install(PROGRAMS
   nodes/command_processor.py
   DESTINATION lib/${PROJECT_NAME}
   RENAME command_processor
+)
+
+install(PROGRAMS
+  nodes/ddsm_driver_node.py
+  DESTINATION lib/${PROJECT_NAME}
+  RENAME ddsm_driver_node
+)
+
+install(PROGRAMS
+  nodes/st3215_driver_node.py
+  DESTINATION lib/${PROJECT_NAME}
+  RENAME st3215_driver_node
+)
+
+install(PROGRAMS
+  nodes/camera_driver_node.py
+  DESTINATION lib/${PROJECT_NAME}
+  RENAME camera_driver_node
+)
+
+install(PROGRAMS
+  nodes/behavior_manager_node.py
+  DESTINATION lib/${PROJECT_NAME}
+  RENAME behavior_manager_node
+)
+
+install(PROGRAMS
+  nodes/spatial_memory_node.py
+  DESTINATION lib/${PROJECT_NAME}
+  RENAME spatial_memory_node
 )
 
 install(PROGRAMS
@@ -166,11 +201,12 @@ install(PROGRAMS
   RENAME expand_prompt
 )
 
-# Install configuration, launch files, and other resources
+# Install configuration, launch files, URDF, and other resources
 install(DIRECTORY 
   bringup
   config
   devrules
+  urdf
   DESTINATION share/${PROJECT_NAME}
 )
 
@@ -184,6 +220,10 @@ install(FILES
 ament_export_dependencies(
   std_msgs
   audio_common_msgs
+  geometry_msgs
+  nav_msgs
+  sensor_msgs
+  tf2_ros
   rosidl_default_runtime
 )
 

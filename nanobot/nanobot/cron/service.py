@@ -144,10 +144,75 @@ class CronService:
         
         self.store_path.write_text(json.dumps(data, indent=2))
     
+    # Default jobs seeded on first startup (empty store)
+    _DEFAULT_JOBS: list[dict[str, Any]] = [
+        {
+            "name": "map-backup",
+            "message": (
+                "Save the current SLAM map for backup. "
+                "Use ros2(action='exec', command='ros2 service call /slam_toolbox/serialize_map "
+                "slam_toolbox/srv/SerializePoseGraph \"{filename: /tmp/billybot_map_backup}\"') "
+                "and report the result."
+            ),
+            "schedule": CronSchedule(kind="cron", expr="0 */2 * * *"),  # every 2 hours
+        },
+        {
+            "name": "camera-health",
+            "message": (
+                "Run a camera health check. Verify /camera_driver_node is running with "
+                "ros2(action='nodes'), check /camera/color/compressed topic is publishing with "
+                "ros2(action='exec', command='timeout 3 ros2 topic hz /camera/color/compressed --window 3 || echo NO_DATA'), "
+                "and check depth stream with "
+                "ros2(action='exec', command='timeout 3 ros2 topic hz /camera/depth/image_rect_raw --window 3 || echo NO_DATA'). "
+                "Report any issues found."
+            ),
+            "schedule": CronSchedule(kind="cron", expr="*/30 * * * *"),  # every 30 min
+        },
+        {
+            "name": "system-health-report",
+            "message": (
+                "Run a full system health report. Check: "
+                "1) ROS nodes with ros2(action='nodes'), "
+                "2) ROS topics with ros2(action='topics', verbose=True), "
+                "3) Container status with ros2(action='exec', command='echo ok'), "
+                "4) Disk usage with ros2(action='exec', command='df -h /ros2_ws /tmp | tail -2'), "
+                "5) Memory with ros2(action='exec', command='free -h | head -2'). "
+                "Summarize the overall system health status."
+            ),
+            "schedule": CronSchedule(kind="cron", expr="0 * * * *"),  # every hour
+        },
+    ]
+
+    def _seed_defaults(self) -> None:
+        """Seed default jobs when the store is empty (first run)."""
+        if not self._store or self._store.jobs:
+            return
+        now = _now_ms()
+        for dflt in self._DEFAULT_JOBS:
+            job = CronJob(
+                id=str(uuid.uuid4())[:8],
+                name=dflt["name"],
+                enabled=True,
+                schedule=dflt["schedule"],
+                payload=CronPayload(
+                    kind="agent_turn",
+                    message=dflt["message"],
+                ),
+                state=CronJobState(
+                    next_run_at_ms=_compute_next_run(dflt["schedule"], now),
+                ),
+                created_at_ms=now,
+                updated_at_ms=now,
+            )
+            self._store.jobs.append(job)
+        self._save_store()
+        logger.info(f"Cron: seeded {len(self._DEFAULT_JOBS)} default jobs")
+
     async def start(self) -> None:
         """Start the cron service."""
         self._running = True
         self._load_store()
+        self._seed_defaults()
         self._recompute_next_runs()
         self._save_store()
         self._arm_timer()

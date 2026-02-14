@@ -2,84 +2,380 @@
 {% block title %}Dashboard{% endblock %}
 {% block page_title %}Dashboard{% endblock %}
 
+{% block help_modal %}
+<div id="helpModal" class="hidden fixed inset-0 z-50 hud-modal-backdrop flex items-start justify-center pt-20 px-4" onclick="if(event.target===this)this.classList.add('hidden')">
+  <div class="hud-modal rounded-2xl max-w-2xl w-full max-h-[75vh] overflow-y-auto p-8">
+    <div class="flex items-center justify-between mb-6">
+      <h2 class="text-lg font-semibold text-white tracking-tight">Dashboard Documentation</h2>
+      <button onclick="document.getElementById('helpModal').classList.add('hidden')" class="text-slate-500 hover:text-white transition-colors text-xl leading-none">&times;</button>
+    </div>
+
+    <div class="doc-section">
+      <h3>Overview</h3>
+      <p>The Dashboard is your primary operational overview of the entire BillyBot system. It aggregates real-time status from all Docker containers, active ROS 2 nodes, and running topics into a single, glanceable interface.</p>
+      <p>Data refreshes automatically every <code>10 seconds</code> via REST API polling against <code>/api/system/health/</code>, <code>/api/docker/containers/</code>, <code>/api/ros2/nodes/</code>, and <code>/api/ros2/topics/</code>.</p>
+    </div>
+
+    <div class="doc-section">
+      <h3>System Health Banner</h3>
+      <p>The top banner provides a composite health indicator computed from container and ROS 2 node status:</p>
+      <dl class="doc-grid">
+        <dt>OPERATIONAL</dt>
+        <dd>All containers running, ROS 2 nodes responding. System is fully functional.</dd>
+        <dt>DEGRADED</dt>
+        <dd>Some containers or nodes offline. Partial functionality available.</dd>
+        <dt>OFFLINE</dt>
+        <dd>No containers or nodes detected. System requires intervention.</dd>
+      </dl>
+    </div>
+
+    <div class="doc-section">
+      <h3>Operations Panel</h3>
+      <p>Action buttons are grouped by category:</p>
+      <dl class="doc-grid">
+        <dt>ROS 2</dt>
+        <dd>Build workspace (colcon build), list nodes, list topics.</dd>
+        <dt>Docker</dt>
+        <dd>Restart individual containers (ros2, nanobot, dashboard, redis).</dd>
+        <dt>Diagnostics</dt>
+        <dd>Camera health check, system healthcheck script, save SLAM map.</dd>
+      </dl>
+    </div>
+
+    <div class="doc-section">
+      <h3>Architecture</h3>
+      <div class="info-box">
+        <p class="font-mono text-xs leading-relaxed">docker-compose.yml<br>
+        &nbsp;&nbsp;ros2-byc &rarr; billybot-ros2 (ROS 2 + voice + AI agents)<br>
+        &nbsp;&nbsp;nanobot &rarr; billybot-nanobot (AI assistant gateway)<br>
+        &nbsp;&nbsp;dashboard &rarr; billybot-dashboard (Django + WebSocket)<br>
+        &nbsp;&nbsp;redis &rarr; billybot-redis (channel layer)</p>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
 {% block content %}
 <div x-data="dashboardApp()" x-init="init()">
 
-  <!-- Status cards row -->
-  <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-    <!-- Container statuses -->
-    <template x-for="c in containers" :key="c.name">
-      <div class="glass rounded-xl p-5">
-        <div class="flex items-center justify-between mb-3">
-          <span class="text-xs font-semibold text-slate-400 uppercase tracking-wider" x-text="c.label"></span>
-          <span class="w-2.5 h-2.5 rounded-full" :class="c.running ? 'bg-emerald-500 pulse-dot' : 'bg-red-500'"></span>
+  <!-- System Health Banner -->
+  <div class="hud-panel rounded-xl p-4 mb-6 hud-glow"
+       :class="{
+         'border-emerald-500/30': health === 'healthy',
+         'border-amber-500/30': health === 'degraded',
+         'border-red-500/30': health === 'unhealthy'
+       }">
+    <div class="flex items-center justify-between">
+      <div class="flex items-center gap-4">
+        <div class="w-3 h-3 rounded-full pulse-dot"
+             :class="{
+               'bg-emerald-500': health === 'healthy',
+               'bg-amber-500': health === 'degraded',
+               'bg-red-500': health === 'unhealthy',
+               'bg-slate-500': health === 'loading'
+             }"></div>
+        <div>
+          <span class="text-xs font-semibold uppercase tracking-widest"
+                :class="{
+                  'text-emerald-400': health === 'healthy',
+                  'text-amber-400': health === 'degraded',
+                  'text-red-400': health === 'unhealthy',
+                  'text-slate-400': health === 'loading'
+                }"
+                x-text="health === 'healthy' ? 'OPERATIONAL' : health === 'degraded' ? 'DEGRADED' : health === 'unhealthy' ? 'OFFLINE' : 'CONNECTING...'"></span>
+          <div class="text-xs text-slate-500 mt-0.5">
+            <span x-text="runningCount + '/' + totalCount + ' containers'"></span>
+            <span class="mx-2 text-slate-700">|</span>
+            <span x-text="nodeCount + ' nodes'"></span>
+            <span class="mx-2 text-slate-700">|</span>
+            <span x-text="topicCount + ' topics'"></span>
+          </div>
         </div>
-        <div class="text-2xl font-bold text-white" x-text="c.running ? 'Running' : 'Stopped'"></div>
-        <div class="text-xs text-slate-500 mt-1" x-text="c.status"></div>
       </div>
-    </template>
-
-    <!-- Node count -->
-    <div class="glass rounded-xl p-5">
-      <div class="flex items-center justify-between mb-3">
-        <span class="text-xs font-semibold text-slate-400 uppercase tracking-wider">ROS 2 Nodes</span>
-        <svg class="w-5 h-5 text-brand-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M5 12h14M5 12a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v4a2 2 0 01-2 2M5 12a2 2 0 00-2 2v4a2 2 0 002 2h14a2 2 0 002-2v-4a2 2 0 00-2-2m-2-4h.01M17 16h.01"/></svg>
+      <div class="flex items-center gap-3">
+        <span class="text-xs text-slate-500 font-mono" x-text="'Uptime: ' + uptime"></span>
+        <button @click="refreshAll()" class="hud-btn hud-btn-secondary text-xs py-1.5 px-3 flex items-center gap-1.5" :class="refreshing && 'opacity-50 pointer-events-none'">
+          <svg class="w-3.5 h-3.5" :class="refreshing && 'animate-spin'" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+          Refresh
+        </button>
       </div>
-      <div class="text-2xl font-bold text-white" x-text="nodeCount"></div>
-      <div class="text-xs text-slate-500 mt-1">Active nodes</div>
-    </div>
-
-    <!-- Topic count -->
-    <div class="glass rounded-xl p-5">
-      <div class="flex items-center justify-between mb-3">
-        <span class="text-xs font-semibold text-slate-400 uppercase tracking-wider">Topics</span>
-        <svg class="w-5 h-5 text-brand-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
-      </div>
-      <div class="text-2xl font-bold text-white" x-text="topicCount"></div>
-      <div class="text-xs text-slate-500 mt-1">Active topics</div>
     </div>
   </div>
 
-  <!-- Two column layout -->
-  <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
-    <!-- Nodes list -->
-    <div class="glass rounded-xl p-5">
-      <h2 class="text-sm font-semibold text-slate-300 uppercase tracking-wider mb-4">Active Nodes</h2>
-      <div class="space-y-2 max-h-80 overflow-y-auto">
+  <!-- Metric Cards Row -->
+  <div class="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+    <div class="hud-panel rounded-xl p-4 hud-glow">
+      <div class="flex items-center justify-between mb-2">
+        <span class="text-[10px] font-semibold text-cyan-400/70 uppercase tracking-widest">Containers</span>
+        <svg class="w-4 h-4 text-cyan-500/40" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"/></svg>
+      </div>
+      <div class="text-2xl font-bold" :class="runningCount === totalCount && totalCount > 0 ? 'text-emerald-400' : runningCount > 0 ? 'text-amber-400' : 'text-red-400'" x-text="runningCount + '/' + totalCount"></div>
+      <div class="text-[10px] text-slate-500 mt-1">Running</div>
+    </div>
+    <div class="hud-panel rounded-xl p-4 hud-glow">
+      <div class="flex items-center justify-between mb-2">
+        <span class="text-[10px] font-semibold text-cyan-400/70 uppercase tracking-widest">ROS 2 Nodes</span>
+        <svg class="w-4 h-4 text-cyan-500/40" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M5 12h14M5 12a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v4a2 2 0 01-2 2M5 12a2 2 0 00-2 2v4a2 2 0 002 2h14a2 2 0 002-2v-4a2 2 0 00-2-2"/></svg>
+      </div>
+      <div class="text-2xl font-bold text-cyan-300" x-text="nodeCount"></div>
+      <div class="text-[10px] text-slate-500 mt-1">Active</div>
+    </div>
+    <div class="hud-panel rounded-xl p-4 hud-glow">
+      <div class="flex items-center justify-between mb-2">
+        <span class="text-[10px] font-semibold text-cyan-400/70 uppercase tracking-widest">Topics</span>
+        <svg class="w-4 h-4 text-cyan-500/40" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
+      </div>
+      <div class="text-2xl font-bold text-cyan-300" x-text="topicCount"></div>
+      <div class="text-[10px] text-slate-500 mt-1">Publishing</div>
+    </div>
+    <div class="hud-panel rounded-xl p-4 hud-glow">
+      <div class="flex items-center justify-between mb-2">
+        <span class="text-[10px] font-semibold text-cyan-400/70 uppercase tracking-widest">Cron Jobs</span>
+        <svg class="w-4 h-4 text-cyan-500/40" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+      </div>
+      <div class="text-2xl font-bold text-cyan-300" x-text="cronCount"></div>
+      <div class="text-[10px] text-slate-500 mt-1">Scheduled</div>
+    </div>
+  </div>
+
+  <!-- Main Grid: 3 columns -->
+  <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
+
+    <!-- Column 1: Containers -->
+    <div class="hud-panel rounded-xl p-5">
+      <h2 class="hud-section-title">Docker Containers</h2>
+      <div class="space-y-2">
+        <template x-for="c in containers" :key="c.name">
+          <div class="flex items-center justify-between p-3 rounded-lg bg-slate-800/40 border border-slate-700/50">
+            <div class="flex items-center gap-3 min-w-0">
+              <span class="w-2 h-2 rounded-full shrink-0" :class="c.running ? 'bg-emerald-500 pulse-dot' : 'bg-red-500'"></span>
+              <div class="min-w-0">
+                <div class="text-sm font-medium text-slate-200 truncate" x-text="c.label"></div>
+                <div class="text-[10px] text-slate-500 font-mono truncate" x-text="c.status"></div>
+              </div>
+            </div>
+            <button @click="restartContainer(c.name)" class="shrink-0 p-1.5 rounded-md text-slate-500 hover:text-amber-400 hover:bg-amber-500/10 transition-colors" title="Restart container" :disabled="c._restarting">
+              <svg class="w-4 h-4" :class="c._restarting && 'animate-spin'" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+            </button>
+          </div>
+        </template>
+        <div x-show="containers.length === 0" class="text-sm text-slate-500 text-center py-4">No containers detected</div>
+      </div>
+    </div>
+
+    <!-- Column 2: Active Nodes -->
+    <div class="hud-panel rounded-xl p-5">
+      <div class="flex items-center justify-between mb-4">
+        <h2 class="hud-section-title mb-0">Active Nodes</h2>
+        <a href="{% url 'nodes' %}" class="text-[10px] text-cyan-400/60 hover:text-cyan-300 transition-colors uppercase tracking-wider">View all &rarr;</a>
+      </div>
+      <div class="space-y-1.5 max-h-64 overflow-y-auto">
         <template x-for="node in nodeList" :key="node">
-          <div class="flex items-center gap-3 px-3 py-2 rounded-lg bg-slate-800/50">
-            <span class="w-2 h-2 rounded-full bg-emerald-500 shrink-0"></span>
-            <span class="text-sm font-mono text-slate-300 truncate" x-text="node"></span>
+          <div class="flex items-center gap-2.5 px-3 py-2 rounded-lg bg-slate-800/30 border border-slate-700/30">
+            <span class="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0"></span>
+            <span class="text-xs font-mono text-slate-400 truncate" x-text="node"></span>
           </div>
         </template>
         <div x-show="nodeList.length === 0" class="text-sm text-slate-500 text-center py-4">No nodes detected</div>
       </div>
     </div>
 
-    <!-- Activity log -->
-    <div class="glass rounded-xl p-5">
-      <h2 class="text-sm font-semibold text-slate-300 uppercase tracking-wider mb-4">Activity Log</h2>
-      <div class="space-y-2 max-h-80 overflow-y-auto" id="activity-log">
-        <template x-for="(entry, i) in activityLog" :key="i">
-          <div class="flex items-start gap-3 px-3 py-2 rounded-lg bg-slate-800/50">
-            <span class="text-xs text-slate-500 shrink-0 mt-0.5 font-mono" x-text="entry.time"></span>
-            <span class="text-sm text-slate-300" x-text="entry.msg"></span>
+    <!-- Column 3: Navigation & Camera Status -->
+    <div class="hud-panel rounded-xl p-5">
+      <h2 class="hud-section-title">Subsystem Status</h2>
+      <div class="space-y-2">
+        <div class="flex items-center justify-between p-3 rounded-lg bg-slate-800/40 border border-slate-700/50">
+          <div class="flex items-center gap-3">
+            <svg class="w-4 h-4 text-cyan-400/60" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"/></svg>
+            <span class="text-sm text-slate-300">Camera</span>
           </div>
-        </template>
-        <div x-show="activityLog.length === 0" class="text-sm text-slate-500 text-center py-4">No activity yet</div>
+          <span class="text-xs font-mono px-2 py-0.5 rounded-full"
+                :class="navStatus.camera ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30' : 'bg-red-500/15 text-red-400 border border-red-500/30'"
+                x-text="navStatus.camera ? 'ONLINE' : 'OFFLINE'"></span>
+        </div>
+        <div class="flex items-center justify-between p-3 rounded-lg bg-slate-800/40 border border-slate-700/50">
+          <div class="flex items-center gap-3">
+            <svg class="w-4 h-4 text-cyan-400/60" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l5.447 2.724A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7"/></svg>
+            <span class="text-sm text-slate-300">Depth</span>
+          </div>
+          <span class="text-xs font-mono px-2 py-0.5 rounded-full"
+                :class="navStatus.depth ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30' : 'bg-red-500/15 text-red-400 border border-red-500/30'"
+                x-text="navStatus.depth ? 'ONLINE' : 'OFFLINE'"></span>
+        </div>
+        <div class="flex items-center justify-between p-3 rounded-lg bg-slate-800/40 border border-slate-700/50">
+          <div class="flex items-center gap-3">
+            <svg class="w-4 h-4 text-cyan-400/60" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l5.447 2.724A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7"/></svg>
+            <span class="text-sm text-slate-300">SLAM Map</span>
+          </div>
+          <span class="text-xs font-mono px-2 py-0.5 rounded-full"
+                :class="navStatus.map ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30' : 'bg-slate-500/15 text-slate-400 border border-slate-500/30'"
+                x-text="navStatus.map ? 'ACTIVE' : 'INACTIVE'"></span>
+        </div>
+        <div class="flex items-center justify-between p-3 rounded-lg bg-slate-800/40 border border-slate-700/50">
+          <div class="flex items-center gap-3">
+            <svg class="w-4 h-4 text-cyan-400/60" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+            <span class="text-sm text-slate-300">Odometry</span>
+          </div>
+          <span class="text-xs font-mono px-2 py-0.5 rounded-full"
+                :class="navStatus.odom ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30' : 'bg-slate-500/15 text-slate-400 border border-slate-500/30'"
+                x-text="navStatus.odom ? 'ACTIVE' : 'INACTIVE'"></span>
+        </div>
       </div>
     </div>
   </div>
 
-  <!-- Quick actions -->
-  <div class="mt-6 glass rounded-xl p-5">
-    <h2 class="text-sm font-semibold text-slate-300 uppercase tracking-wider mb-4">Quick Actions</h2>
-    <div class="flex flex-wrap gap-3">
-      <button @click="quickAction('build')" class="px-4 py-2 rounded-lg bg-brand-600 hover:bg-brand-700 text-white text-sm font-medium transition-colors">Build Workspace</button>
-      <button @click="quickAction('restart')" class="px-4 py-2 rounded-lg bg-amber-600 hover:bg-amber-700 text-white text-sm font-medium transition-colors">Restart ROS 2</button>
-      <button @click="refreshAll()" class="px-4 py-2 rounded-lg bg-slate-700 hover:bg-slate-600 text-white text-sm font-medium transition-colors">Refresh Status</button>
+  <!-- Operations Panel -->
+  <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+
+    <!-- Operations: Actions -->
+    <div class="hud-panel rounded-xl p-5">
+      <h2 class="hud-section-title">Operations</h2>
+
+      <!-- ROS 2 -->
+      <div class="mb-4">
+        <div class="text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-2">ROS 2</div>
+        <div class="flex flex-wrap gap-2">
+          <button @click="runAction('build', 'Building workspace...')" class="hud-btn hud-btn-primary text-xs py-1.5">
+            <span class="flex items-center gap-1.5">
+              <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z"/></svg>
+              Build Workspace
+            </span>
+          </button>
+          <button @click="runAction('nodes', 'Listing nodes...')" class="hud-btn hud-btn-secondary text-xs py-1.5">
+            <span class="flex items-center gap-1.5">
+              <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 10h16M4 14h16M4 18h16"/></svg>
+              List Nodes
+            </span>
+          </button>
+          <button @click="runAction('topics', 'Listing topics...')" class="hud-btn hud-btn-secondary text-xs py-1.5">
+            <span class="flex items-center gap-1.5">
+              <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 9l3 3-3 3m5 0h3"/></svg>
+              List Topics
+            </span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Diagnostics -->
+      <div class="mb-4">
+        <div class="text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-2">Diagnostics</div>
+        <div class="flex flex-wrap gap-2">
+          <button @click="runAction('camera_scan', 'Scanning for RealSense camera...')" class="hud-btn hud-btn-primary text-xs py-1.5">
+            <span class="flex items-center gap-1.5">
+              <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
+              Scan Camera
+            </span>
+          </button>
+          <button @click="runAction('camera_check', 'Checking camera...')" class="hud-btn hud-btn-primary text-xs py-1.5">
+            <span class="flex items-center gap-1.5">
+              <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"/></svg>
+              Camera Health
+            </span>
+          </button>
+          <button @click="runAction('healthcheck', 'Running healthcheck...')" class="hud-btn hud-btn-primary text-xs py-1.5">
+            <span class="flex items-center gap-1.5">
+              <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+              System Health
+            </span>
+          </button>
+          <button @click="runAction('map_save', 'Saving SLAM map...')" class="hud-btn hud-btn-secondary text-xs py-1.5">
+            <span class="flex items-center gap-1.5">
+              <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4"/></svg>
+              Save Map
+            </span>
+          </button>
+          <button @click="runAction('map_list', 'Listing saved maps...')" class="hud-btn hud-btn-secondary text-xs py-1.5">
+            <span class="flex items-center gap-1.5">
+              <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l5.447 2.724A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7"/></svg>
+              List Maps
+            </span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Gateway -->
+      <div>
+        <div class="text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-2">Gateway</div>
+        <div class="flex flex-wrap gap-2">
+          <button @click="runAction('nanobot_restart', 'Restarting nanobot...')" class="hud-btn hud-btn-warning text-xs py-1.5">
+            <span class="flex items-center gap-1.5">
+              <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+              Restart Nanobot
+            </span>
+          </button>
+          <button @click="runAction('nanobot_status', 'Fetching nanobot status...')" class="hud-btn hud-btn-secondary text-xs py-1.5">
+            <span class="flex items-center gap-1.5">
+              <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+              Nanobot Status
+            </span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Action output -->
+      <div x-show="actionResult" x-transition class="mt-4">
+        <div class="flex items-center justify-between mb-1">
+          <span class="text-[10px] text-slate-500 font-mono uppercase" x-text="actionLabel"></span>
+          <button @click="actionResult = ''; actionLabel = ''" class="text-[10px] text-slate-600 hover:text-slate-400">&times; Clear</button>
+        </div>
+        <pre class="p-3 rounded-lg bg-slate-900/80 border border-cyan-500/10 text-xs font-mono text-slate-300 whitespace-pre-wrap max-h-48 overflow-y-auto" x-text="actionResult"></pre>
+      </div>
     </div>
-    <div x-show="actionResult" class="mt-3 p-3 rounded-lg bg-slate-800/80 text-sm font-mono text-slate-300 whitespace-pre-wrap max-h-40 overflow-y-auto" x-text="actionResult"></div>
+
+    <!-- Activity Log -->
+    <div class="hud-panel rounded-xl p-5">
+      <div class="flex items-center justify-between mb-4">
+        <h2 class="hud-section-title mb-0">Activity Log</h2>
+        <button @click="activityLog = []" class="text-[10px] text-slate-600 hover:text-slate-400 transition-colors">Clear</button>
+      </div>
+      <div class="space-y-1 max-h-[400px] overflow-y-auto" id="activity-log">
+        <template x-for="(entry, i) in activityLog" :key="i">
+          <div class="flex items-start gap-2 px-3 py-2 rounded-lg bg-slate-800/30 border border-slate-700/30">
+            <span class="w-1.5 h-1.5 rounded-full mt-1.5 shrink-0"
+                  :class="{
+                    'bg-emerald-500': entry.level === 'ok',
+                    'bg-cyan-400': entry.level === 'info',
+                    'bg-amber-500': entry.level === 'warn',
+                    'bg-red-500': entry.level === 'error'
+                  }"></span>
+            <div class="min-w-0 flex-1">
+              <span class="text-xs text-slate-300" x-text="entry.msg"></span>
+            </div>
+            <span class="text-[10px] text-slate-600 shrink-0 font-mono" x-text="entry.time"></span>
+          </div>
+        </template>
+        <div x-show="activityLog.length === 0" class="text-sm text-slate-500 text-center py-8">No activity yet</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Quick Navigation Cards -->
+  <div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+    <a href="{% url 'control' %}" class="hud-panel rounded-xl p-4 hud-glow hover:border-cyan-500/40 transition-all group text-center">
+      <svg class="w-6 h-6 mx-auto mb-2 text-cyan-400/50 group-hover:text-cyan-300 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M15 15l-2 5L9 9l11 4-5 2zm0 0l5 5"/></svg>
+      <div class="text-xs font-medium text-slate-400 group-hover:text-white transition-colors">Control</div>
+    </a>
+    <a href="{% url 'vision' %}" class="hud-panel rounded-xl p-4 hud-glow hover:border-cyan-500/40 transition-all group text-center">
+      <svg class="w-6 h-6 mx-auto mb-2 text-cyan-400/50 group-hover:text-cyan-300 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"/></svg>
+      <div class="text-xs font-medium text-slate-400 group-hover:text-white transition-colors">Vision</div>
+    </a>
+    <a href="{% url 'telemetry' %}" class="hud-panel rounded-xl p-4 hud-glow hover:border-cyan-500/40 transition-all group text-center">
+      <svg class="w-6 h-6 mx-auto mb-2 text-cyan-400/50 group-hover:text-cyan-300 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/></svg>
+      <div class="text-xs font-medium text-slate-400 group-hover:text-white transition-colors">Telemetry</div>
+    </a>
+    <a href="{% url 'behaviors' %}" class="hud-panel rounded-xl p-4 hud-glow hover:border-cyan-500/40 transition-all group text-center">
+      <svg class="w-6 h-6 mx-auto mb-2 text-cyan-400/50 group-hover:text-cyan-300 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
+      <div class="text-xs font-medium text-slate-400 group-hover:text-white transition-colors">Behaviors</div>
+    </a>
+    <a href="{% url 'chat' %}" class="hud-panel rounded-xl p-4 hud-glow hover:border-cyan-500/40 transition-all group text-center">
+      <svg class="w-6 h-6 mx-auto mb-2 text-cyan-400/50 group-hover:text-cyan-300 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"/></svg>
+      <div class="text-xs font-medium text-slate-400 group-hover:text-white transition-colors">Nanobot</div>
+    </a>
+    <a href="{% url 'logs' %}" class="hud-panel rounded-xl p-4 hud-glow hover:border-cyan-500/40 transition-all group text-center">
+      <svg class="w-6 h-6 mx-auto mb-2 text-cyan-400/50 group-hover:text-cyan-300 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+      <div class="text-xs font-medium text-slate-400 group-hover:text-white transition-colors">Logs</div>
+    </a>
   </div>
 </div>
 {% endblock %}
@@ -92,31 +388,75 @@ function dashboardApp() {
     nodeList: [],
     nodeCount: '-',
     topicCount: '-',
+    cronCount: '-',
+    health: 'loading',
+    uptime: '--:--:--',
+    runningCount: 0,
+    totalCount: 0,
+    navStatus: { camera: false, depth: false, map: false, odom: false },
     activityLog: [],
     actionResult: '',
+    actionLabel: '',
+    refreshing: false,
 
     async init() {
       await this.refreshAll();
       setInterval(() => this.refreshAll(), 10000);
     },
 
-    log(msg) {
+    log(msg, level = 'info') {
       const now = new Date().toLocaleTimeString('en-GB', {hour:'2-digit', minute:'2-digit', second:'2-digit'});
-      this.activityLog.unshift({ time: now, msg });
-      if (this.activityLog.length > 50) this.activityLog.pop();
+      this.activityLog.unshift({ time: now, msg, level });
+      if (this.activityLog.length > 100) this.activityLog.pop();
     },
 
     async refreshAll() {
-      this.log('Refreshing system status...');
-      await Promise.all([this.fetchContainers(), this.fetchNodes(), this.fetchTopics()]);
+      this.refreshing = true;
+      try {
+        await Promise.all([
+          this.fetchSystemHealth(),
+          this.fetchContainers(),
+          this.fetchNodes(),
+          this.fetchTopics(),
+          this.fetchNavStatus(),
+          this.fetchCronJobs(),
+        ]);
+      } finally {
+        this.refreshing = false;
+      }
+    },
+
+    async fetchSystemHealth() {
+      try {
+        const r = await fetch('/api/system/health/');
+        const data = await r.json();
+        this.health = data.overall || 'unhealthy';
+        this.uptime = this.formatUptime(data.dashboard?.uptime || 0);
+      } catch(e) {
+        this.health = 'unhealthy';
+      }
     },
 
     async fetchContainers() {
       try {
         const r = await fetch('/api/docker/containers/');
         const data = await r.json();
-        this.containers = data.containers || [];
-      } catch(e) { this.containers = []; }
+        const prev = new Map(this.containers.map(c => [c.name, c.running]));
+        this.containers = (data.containers || []).map(c => ({ ...c, _restarting: false }));
+        this.runningCount = this.containers.filter(c => c.running).length;
+        this.totalCount = this.containers.length;
+        // Log state changes
+        for (const c of this.containers) {
+          const was = prev.get(c.name);
+          if (was !== undefined && was !== c.running) {
+            this.log(c.label + (c.running ? ' came online' : ' went offline'), c.running ? 'ok' : 'error');
+          }
+        }
+      } catch(e) {
+        this.containers = [];
+        this.runningCount = 0;
+        this.totalCount = 0;
+      }
     },
 
     async fetchNodes() {
@@ -136,29 +476,173 @@ function dashboardApp() {
       } catch(e) { this.topicCount = '?'; }
     },
 
-    async quickAction(action) {
-      this.actionResult = `Running ${action}...`;
-      this.log(`Quick action: ${action}`);
+    async fetchNavStatus() {
       try {
-        let r;
-        if (action === 'build') {
-          r = await fetch('/api/ros2/exec/', {
-            method: 'POST',
-            headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({ command: 'cd /ros2_ws && colcon build --packages-select by_your_command --symlink-install' })
-          });
-        } else if (action === 'restart') {
-          r = await fetch('/api/docker/restart/', {
-            method: 'POST',
-            headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({ container: 'billybot-ros2' })
-          });
-        }
+        const r = await fetch('/api/nav/status/');
         const data = await r.json();
-        this.actionResult = data.output || data.result || JSON.stringify(data);
-        this.log(`${action} completed`);
+        this.navStatus.camera = data.camera_active || false;
+        this.navStatus.depth = data.depth_active || false;
+        this.navStatus.map = data.map_active || false;
+        this.navStatus.odom = data.odom_active || false;
+      } catch(e) {}
+    },
+
+    async fetchCronJobs() {
+      try {
+        const r = await fetch('/api/nanobot/cron/');
+        const data = await r.json();
+        this.cronCount = (data.jobs || []).length;
+      } catch(e) { this.cronCount = '?'; }
+    },
+
+    formatUptime(seconds) {
+      const h = Math.floor(seconds / 3600);
+      const m = Math.floor((seconds % 3600) / 60);
+      const s = Math.floor(seconds % 60);
+      return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+    },
+
+    async restartContainer(name) {
+      const c = this.containers.find(x => x.name === name);
+      if (c) c._restarting = true;
+      this.log('Restarting ' + name + '...', 'warn');
+      try {
+        const r = await fetch('/api/docker/restart/', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({ container: name })
+        });
+        const data = await r.json();
+        this.log(name + ' restart: ' + (data.result || 'done'), 'ok');
       } catch(e) {
-        this.actionResult = `Error: ${e.message}`;
+        this.log('Failed to restart ' + name + ': ' + e.message, 'error');
+      } finally {
+        if (c) c._restarting = false;
+        setTimeout(() => this.fetchContainers(), 3000);
+      }
+    },
+
+    async runAction(action, label) {
+      this.actionResult = label || 'Running...';
+      this.actionLabel = action;
+      this.log(label, 'info');
+
+      try {
+        let r, data;
+        switch(action) {
+          case 'build':
+            r = await fetch('/api/ros2/exec/', {
+              method: 'POST',
+              headers: {'Content-Type': 'application/json'},
+              body: JSON.stringify({ command: 'cd /ros2_ws && colcon build --packages-select by_your_command --symlink-install 2>&1' })
+            });
+            data = await r.json();
+            this.actionResult = data.output || data.result || JSON.stringify(data);
+            this.log('Build completed', 'ok');
+            break;
+
+          case 'nodes':
+            r = await fetch('/api/ros2/nodes/');
+            data = await r.json();
+            this.actionResult = (data.nodes || []).join('\n') || 'No nodes found';
+            break;
+
+          case 'topics':
+            r = await fetch('/api/ros2/topics/');
+            data = await r.json();
+            this.actionResult = (data.topics || []).map(t => t.name || t).join('\n') || 'No topics found';
+            break;
+
+          case 'camera_scan':
+            r = await fetch('/api/camera/scan/', {
+              method: 'POST',
+              headers: {'Content-Type': 'application/json'},
+              body: '{}'
+            });
+            data = await r.json();
+            this.actionResult = data.output || JSON.stringify(data);
+            this.log(
+              data.success ? 'Camera found and connected' : 'No camera detected',
+              data.success ? 'ok' : 'warn'
+            );
+            // Refresh nav status to update camera indicator
+            setTimeout(() => this.fetchNavStatus(), 2000);
+            break;
+
+          case 'camera_check':
+            r = await fetch('/api/ros2/exec/', {
+              method: 'POST',
+              headers: {'Content-Type': 'application/json'},
+              body: JSON.stringify({ command: 'echo "=== Camera Node ===" && ros2 node info /camera_driver_node 2>&1 && echo "\n=== Color Topic Hz ===" && timeout 4 ros2 topic hz /camera/color/compressed --window 3 2>&1 || echo "No data" && echo "\n=== Depth Topic Hz ===" && timeout 4 ros2 topic hz /camera/depth/image_rect_raw --window 3 2>&1 || echo "No data"' })
+            });
+            data = await r.json();
+            this.actionResult = data.output || data.result || 'No response';
+            this.log('Camera health check done', data.output?.includes('Error') ? 'warn' : 'ok');
+            break;
+
+          case 'healthcheck':
+            r = await fetch('/api/system/health/');
+            data = await r.json();
+            const lines = [
+              'Overall: ' + (data.overall || 'unknown').toUpperCase(),
+              'Dashboard uptime: ' + this.formatUptime(data.dashboard?.uptime || 0),
+              '',
+              'Containers:',
+              ...(data.containers || []).map(c => '  ' + (c.running ? '[OK]' : '[!!]') + ' ' + c.name + ' - ' + c.status),
+              '',
+              'ROS 2 Nodes (' + (data.ros2?.nodes?.length || 0) + '):',
+              ...(data.ros2?.nodes || []).map(n => '  ' + n),
+              '',
+              'Topics: ' + (data.ros2?.topics_count || 0),
+            ];
+            this.actionResult = lines.join('\n');
+            this.log('System health report generated', 'ok');
+            break;
+
+          case 'map_save':
+            r = await fetch('/api/map/save/', {
+              method: 'POST',
+              headers: {'Content-Type': 'application/json'},
+              body: JSON.stringify({ name: 'billybot_map_' + Date.now() })
+            });
+            data = await r.json();
+            this.actionResult = data.output || data.result || JSON.stringify(data);
+            this.log('Map save: ' + (data.output || 'done'), data.output?.includes('Error') ? 'warn' : 'ok');
+            break;
+
+          case 'map_list':
+            r = await fetch('/api/map/list/');
+            data = await r.json();
+            if (data.maps && data.maps.length > 0) {
+              this.actionResult = data.maps.map(m => m.name + '\n  ' + m.files.join('\n  ')).join('\n\n');
+            } else {
+              this.actionResult = 'No saved maps found';
+            }
+            break;
+
+          case 'nanobot_restart':
+            r = await fetch('/api/nanobot/gateway/restart/', {
+              method: 'POST',
+              headers: {'Content-Type': 'application/json'},
+              body: '{}'
+            });
+            data = await r.json();
+            this.actionResult = data.result || 'Nanobot restarted';
+            this.log('Nanobot gateway restarted', 'ok');
+            break;
+
+          case 'nanobot_status':
+            r = await fetch('/api/nanobot/status/');
+            data = await r.json();
+            this.actionResult = data.output || JSON.stringify(data, null, 2);
+            break;
+
+          default:
+            this.actionResult = 'Unknown action: ' + action;
+        }
+      } catch(e) {
+        this.actionResult = 'Error: ' + e.message;
+        this.log('Action failed: ' + e.message, 'error');
       }
     }
   }

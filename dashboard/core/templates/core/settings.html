@@ -2,25 +2,171 @@
 {% block title %}Settings{% endblock %}
 {% block page_title %}Settings{% endblock %}
 
+{% block help_modal %}
+<div id="helpModal" class="hidden fixed inset-0 z-50 hud-modal-backdrop flex items-start justify-center pt-20 px-4" onclick="if(event.target===this)this.classList.add('hidden')">
+  <div class="hud-modal rounded-2xl max-w-2xl w-full max-h-[75vh] overflow-y-auto p-8">
+    <div class="flex items-center justify-between mb-6">
+      <h2 class="text-lg font-semibold text-white tracking-tight">Settings &amp; System Documentation</h2>
+      <button onclick="document.getElementById('helpModal').classList.add('hidden')" class="text-slate-500 hover:text-white transition-colors text-xl leading-none">&times;</button>
+    </div>
+
+    <div class="doc-section">
+      <h3>Overview</h3>
+      <p>The Settings page provides system-wide management including Docker container control, health monitoring, launch configuration reference, environment variables, and deployment controls.</p>
+      <p>Health data refreshes automatically every <code>15 seconds</code> via <code>/api/system/health/</code>.</p>
+    </div>
+
+    <div class="doc-section">
+      <h3>Containers</h3>
+      <p>Live status of all Docker containers in the BillyBot stack. Each container can be individually restarted.</p>
+      <dl class="doc-grid">
+        <dt>billybot-ros2</dt>
+        <dd>ROS 2 Humble container. Runs all robot nodes: motor drivers, audio pipeline, voice agents, SLAM, Nav2, behavior manager. Uses <code>network_mode: host</code> for DDS multicast.</dd>
+        <dt>billybot-nanobot</dt>
+        <dd>Nanobot AI gateway. Provides multi-model LLM access with tools, memory, and scheduled jobs. Connects to ROS 2 via the <code>ros2</code> tool.</dd>
+        <dt>billybot-dashboard</dt>
+        <dd>Django + Channels + Daphne. Serves the web dashboard, REST APIs, and WebSocket connections. Communicates with ROS 2 container via <code>docker exec</code>.</dd>
+      </dl>
+      <div class="warn-box mt-3">
+        <p><strong>Restart Warning:</strong> Restarting the ROS 2 container will stop all robot nodes, interrupting motor control, navigation, and voice processing. The robot will stop moving. Nodes auto-restart when the container comes back up.</p>
+      </div>
+    </div>
+
+    <div class="doc-section">
+      <h3>System Health</h3>
+      <p>Aggregated health status across all subsystems. The overall badge shows:</p>
+      <dl class="doc-grid">
+        <dt class="text-emerald-400">HEALTHY</dt>
+        <dd>All containers running, ROS 2 nodes active, topics publishing.</dd>
+        <dt class="text-amber-400">DEGRADED</dt>
+        <dd>Some containers or nodes not responding. Partial functionality available.</dd>
+        <dt class="text-red-400">UNHEALTHY</dt>
+        <dd>Critical failure. Core containers or nodes are down.</dd>
+      </dl>
+      <dl class="doc-grid mt-3">
+        <dt>Dashboard Uptime</dt>
+        <dd>Time since the Django process started. Format: days/hours/minutes/seconds.</dd>
+        <dt>ROS 2 Nodes</dt>
+        <dd>Count of active nodes from <code>ros2 node list</code>. Listed individually below.</dd>
+        <dt>ROS 2 Topics</dt>
+        <dd>Total active topic count from <code>ros2 topic list</code>.</dd>
+        <dt>Containers Running</dt>
+        <dd>Running containers vs total containers (e.g., 3/3).</dd>
+      </dl>
+    </div>
+
+    <div class="doc-section">
+      <h3>Launch Configurations</h3>
+      <p>Reference table of available ROS 2 launch files in the <code>by_your_command</code> package:</p>
+      <dl class="doc-grid">
+        <dt>oai_realtime.launch.py</dt>
+        <dd>OpenAI Realtime API for voice-only conversation with function calling.</dd>
+        <dt>oai_dual_agent.launch.py</dt>
+        <dd>OpenAI dual agent: voice conversation + parallel command extraction pipeline.</dd>
+        <dt>gemini_live.launch.py</dt>
+        <dd>Gemini Live API with optional video input from the camera.</dd>
+        <dt>gemini_dual_agent.launch.py</dt>
+        <dd>Gemini dual agent: full multimodal conversation + command extraction.</dd>
+        <dt>gemini_vision.launch.py</dt>
+        <dd>Gemini vision-focused: periodic camera frame analysis and scene description.</dd>
+        <dt>hardware.launch.py</dt>
+        <dd>Hardware layer only: URDF, DDSM210 motors, ST3215 servos. No AI.</dd>
+        <dt>camera.launch.py</dt>
+        <dd>RealSense D435i driver. Use <code>simulate:=true</code> for development without camera.</dd>
+        <dt>navigation.launch.py</dt>
+        <dd>Full nav stack: hardware + camera + slam_toolbox + Nav2. Required for autonomous navigation.</dd>
+      </dl>
+      <div class="info-box mt-3">
+        <p>Launch files are started inside the ROS 2 container:<br><code>ros2 launch by_your_command &lt;file&gt;.launch.py</code></p>
+        <p class="mt-1">Pass parameters with <code>key:=value</code> syntax, e.g., <code>namespace:=grunt2 simulate:=true</code></p>
+      </div>
+    </div>
+
+    <div class="doc-section">
+      <h3>System Info</h3>
+      <dl class="doc-grid">
+        <dt>ROS 2 Version</dt>
+        <dd>Humble Hawksbill (LTS). Ubuntu 22.04 base image.</dd>
+        <dt>ROS Domain ID</dt>
+        <dd>DDS domain for node discovery. All robots must share the same ID (default: 0). Set via <code>ROS_DOMAIN_ID</code> environment variable.</dd>
+        <dt>DDS Middleware</dt>
+        <dd>CycloneDDS (<code>rmw_cyclonedds_cpp</code>). Selected for reliable multicast discovery and shared-memory transport.</dd>
+        <dt>Bridge WebSocket</dt>
+        <dd>WebSocket endpoint for rosbridge_server (if enabled). Used by external tools like foxglove.</dd>
+        <dt>Dashboard Stack</dt>
+        <dd>Django 4.x + Channels (ASGI) + Daphne (WebSocket server). Alpine.js for reactive UI, Tailwind CSS for styling.</dd>
+      </dl>
+    </div>
+
+    <div class="doc-section">
+      <h3>Environment Variables</h3>
+      <dl class="doc-grid">
+        <dt>ROS_DOMAIN_ID</dt>
+        <dd>DDS domain for multi-robot isolation. Default: 0.</dd>
+        <dt>RMW_IMPLEMENTATION</dt>
+        <dd>DDS middleware. Always <code>rmw_cyclonedds_cpp</code>.</dd>
+        <dt>ROS2_BRIDGE_WS</dt>
+        <dd>WebSocket URL for rosbridge_server connections.</dd>
+        <dt>OPENAI_API_KEY</dt>
+        <dd>API key for OpenAI models (GPT-4o, Realtime API). Masked in UI.</dd>
+        <dt>GOOGLE_API_KEY</dt>
+        <dd>API key for Google Gemini models. Masked in UI.</dd>
+      </dl>
+    </div>
+
+    <div class="doc-section">
+      <h3>Deployment</h3>
+      <dl class="doc-grid">
+        <dt>Build &amp; Deploy</dt>
+        <dd>Triggers a full build and redeploy of all containers. Runs <code>scripts/deploy.sh</code> on the host.</dd>
+        <dt>Pull &amp; Deploy</dt>
+        <dd>Pulls latest images from registry and redeploys. Use when pre-built images are available.</dd>
+        <dt>Rollback</dt>
+        <dd>Reverts to the previous deployment. Use if a new deploy introduces issues.</dd>
+      </dl>
+      <div class="warn-box mt-3">
+        <p><strong>Note:</strong> Deployment commands are placeholders that show the host-side command to run. Actual deployment must be triggered from the host machine, not from within the container.</p>
+      </div>
+    </div>
+
+    <div class="doc-section">
+      <h3>API Endpoints</h3>
+      <dl class="doc-grid">
+        <dt>GET /api/docker/containers/</dt>
+        <dd>Returns list of containers with status, name, and running state.</dd>
+        <dt>POST /api/docker/restart/</dt>
+        <dd>Restarts a container. Body: <code>{ container: "name" }</code>.</dd>
+        <dt>GET /api/system/health/</dt>
+        <dd>Returns aggregated health: overall status, uptime, node count, topic count, container states.</dd>
+      </dl>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
 {% block content %}
 <div x-data="settingsApp()" x-init="init()">
 
   <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
 
-    <!-- Container configuration -->
-    <div class="glass rounded-xl p-5">
-      <h2 class="text-sm font-semibold text-slate-300 uppercase tracking-wider mb-4">Containers</h2>
+    <!-- Container status with health -->
+    <div class="hud-panel rounded-xl p-5">
+      <div class="flex items-center justify-between mb-4">
+        <h2 class="hud-section-title mb-0">Containers</h2>
+        <button @click="fetchContainers()" class="hud-btn hud-btn-secondary text-xs !py-1">Refresh</button>
+      </div>
       <div class="space-y-3">
         <template x-for="c in containers" :key="c.name">
-          <div class="flex items-center justify-between p-3 rounded-lg bg-slate-800/50">
-            <div>
+          <div class="hud-data-row">
+            <div class="flex-1 min-w-0">
               <div class="text-sm font-medium text-white" x-text="c.label"></div>
-              <div class="text-xs text-slate-500 font-mono" x-text="c.name"></div>
+              <div class="text-xs text-slate-500 font-mono truncate" x-text="c.name"></div>
+              <div class="text-xs mt-0.5" :class="c.running ? 'text-emerald-400/70' : 'text-red-400/70'" x-text="c.status"></div>
             </div>
-            <div class="flex items-center gap-3">
-              <span class="w-2 h-2 rounded-full" :class="c.running ? 'bg-emerald-500' : 'bg-red-500'"></span>
+            <div class="flex items-center gap-3 shrink-0">
+              <span class="w-2 h-2 rounded-full" :class="c.running ? 'bg-emerald-500 pulse-dot' : 'bg-red-500'"></span>
               <button @click="restartContainer(c.name)"
-                      class="px-3 py-1.5 rounded-lg bg-amber-600/20 text-amber-400 hover:bg-amber-600/30 text-xs font-medium transition-colors">
+                      class="hud-btn hud-btn-warning text-xs !px-3 !py-1.5">
                 Restart
               </button>
             </div>
@@ -29,61 +175,127 @@
       </div>
     </div>
 
-    <!-- Environment -->
-    <div class="glass rounded-xl p-5">
-      <h2 class="text-sm font-semibold text-slate-300 uppercase tracking-wider mb-4">Environment</h2>
-      <div class="space-y-2 max-h-80 overflow-y-auto">
-        <template x-for="(v, k) in envVars" :key="k">
-          <div class="flex items-center justify-between p-2 rounded bg-slate-800/50 text-sm">
-            <span class="font-mono text-slate-400 truncate" x-text="k"></span>
-            <span class="font-mono text-slate-300 truncate ml-2" x-text="v"></span>
-          </div>
-        </template>
+    <!-- System health -->
+    <div class="hud-panel rounded-xl p-5">
+      <div class="flex items-center justify-between mb-4">
+        <h2 class="hud-section-title mb-0">System Health</h2>
+        <span class="text-xs font-mono px-2 py-0.5 rounded-full border"
+              :class="systemHealth.overall === 'healthy' ? 'text-emerald-400 border-emerald-500/30 bg-emerald-500/10' :
+                       systemHealth.overall === 'degraded' ? 'text-amber-400 border-amber-500/30 bg-amber-500/10' :
+                       'text-red-400 border-red-500/30 bg-red-500/10'"
+              x-text="(systemHealth.overall || 'checking').toUpperCase()"></span>
+      </div>
+      <div class="space-y-2">
+        <div class="hud-data-row text-sm">
+          <span class="text-slate-400">Dashboard Uptime</span>
+          <span class="text-cyan-300 font-mono" x-text="formatUptime(systemHealth.dashboard?.uptime || 0)"></span>
+        </div>
+        <div class="hud-data-row text-sm">
+          <span class="text-slate-400">ROS 2 Nodes</span>
+          <span class="text-cyan-300 font-mono" x-text="(systemHealth.ros2?.nodes || []).length"></span>
+        </div>
+        <div class="hud-data-row text-sm">
+          <span class="text-slate-400">ROS 2 Topics</span>
+          <span class="text-cyan-300 font-mono" x-text="systemHealth.ros2?.topics_count || 0"></span>
+        </div>
+        <div class="hud-data-row text-sm">
+          <span class="text-slate-400">Containers Running</span>
+          <span class="text-cyan-300 font-mono" x-text="(systemHealth.containers || []).filter(c => c.running).length + '/' + (systemHealth.containers || []).length"></span>
+        </div>
+      </div>
+      <!-- Active ROS nodes -->
+      <div class="mt-4 pt-3 border-t border-slate-700/50">
+        <h3 class="text-xs font-semibold text-slate-500 mb-2">Active Nodes</h3>
+        <div class="max-h-32 overflow-y-auto space-y-1">
+          <template x-for="node in (systemHealth.ros2?.nodes || [])" :key="node">
+            <div class="flex items-center gap-2 text-xs">
+              <span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+              <span class="font-mono text-cyan-400/70" x-text="node"></span>
+            </div>
+          </template>
+          <p x-show="!(systemHealth.ros2?.nodes || []).length" class="text-xs text-slate-600">No ROS nodes detected</p>
+        </div>
       </div>
     </div>
 
     <!-- Launch configurations -->
-    <div class="glass rounded-xl p-5">
-      <h2 class="text-sm font-semibold text-slate-300 uppercase tracking-wider mb-4">Launch Configurations</h2>
+    <div class="hud-panel rounded-xl p-5">
+      <h2 class="hud-section-title">Launch Configurations</h2>
       <div class="space-y-2">
         <template x-for="launch in launches" :key="launch.file">
-          <div class="p-3 rounded-lg bg-slate-800/50">
-            <div class="text-sm font-mono text-slate-300" x-text="launch.file"></div>
-            <div class="text-xs text-slate-500 mt-1" x-text="launch.description"></div>
+          <div class="hud-data-row flex-col !items-start gap-1">
+            <div class="text-sm font-mono text-cyan-300" x-text="launch.file"></div>
+            <div class="text-xs text-slate-500" x-text="launch.description"></div>
           </div>
         </template>
       </div>
     </div>
 
-    <!-- System info -->
-    <div class="glass rounded-xl p-5">
-      <h2 class="text-sm font-semibold text-slate-300 uppercase tracking-wider mb-4">System Info</h2>
-      <div class="space-y-2">
-        <div class="flex justify-between p-2 rounded bg-slate-800/50 text-sm">
-          <span class="text-slate-400">ROS 2 Version</span>
-          <span class="text-slate-200">Humble</span>
+    <!-- Environment & System info -->
+    <div class="space-y-6">
+      <div class="hud-panel rounded-xl p-5">
+        <h2 class="hud-section-title">System Info</h2>
+        <div class="space-y-2">
+          <div class="hud-data-row text-sm">
+            <span class="text-slate-400">ROS 2 Version</span>
+            <span class="text-cyan-300">Humble</span>
+          </div>
+          <div class="hud-data-row text-sm">
+            <span class="text-slate-400">ROS Domain ID</span>
+            <span class="text-cyan-300 font-mono">{{ ros_domain_id }}</span>
+          </div>
+          <div class="hud-data-row text-sm">
+            <span class="text-slate-400">DDS Middleware</span>
+            <span class="text-cyan-300">CycloneDDS</span>
+          </div>
+          <div class="hud-data-row text-sm">
+            <span class="text-slate-400">Bridge WebSocket</span>
+            <span class="text-cyan-300 font-mono">{{ ros2_bridge_ws }}</span>
+          </div>
+          <div class="hud-data-row text-sm">
+            <span class="text-slate-400">Dashboard</span>
+            <span class="text-cyan-300">Django + Channels + Daphne</span>
+          </div>
         </div>
-        <div class="flex justify-between p-2 rounded bg-slate-800/50 text-sm">
-          <span class="text-slate-400">ROS Domain ID</span>
-          <span class="text-slate-200 font-mono">{{ ros_domain_id }}</span>
-        </div>
-        <div class="flex justify-between p-2 rounded bg-slate-800/50 text-sm">
-          <span class="text-slate-400">DDS Middleware</span>
-          <span class="text-slate-200">CycloneDDS</span>
-        </div>
-        <div class="flex justify-between p-2 rounded bg-slate-800/50 text-sm">
-          <span class="text-slate-400">Bridge WebSocket</span>
-          <span class="text-slate-200 font-mono">{{ ros2_bridge_ws }}</span>
-        </div>
-        <div class="flex justify-between p-2 rounded bg-slate-800/50 text-sm">
-          <span class="text-slate-400">Dashboard</span>
-          <span class="text-slate-200">Django + Channels + Daphne</span>
+      </div>
+
+      <div class="hud-panel rounded-xl p-5">
+        <h2 class="hud-section-title">Environment</h2>
+        <div class="space-y-2 max-h-48 overflow-y-auto">
+          <template x-for="(v, k) in envVars" :key="k">
+            <div class="hud-data-row text-sm">
+              <span class="font-mono text-cyan-400/60 truncate" x-text="k"></span>
+              <span class="font-mono text-slate-300 truncate ml-2" x-text="v"></span>
+            </div>
+          </template>
         </div>
       </div>
     </div>
   </div>
 
-  <div x-show="actionResult" class="mt-4 glass rounded-xl p-4">
+  <!-- Deployment controls -->
+  <div class="mt-6 hud-panel rounded-xl p-5">
+    <h2 class="hud-section-title">Deployment</h2>
+    <div class="flex flex-wrap gap-3 mb-4">
+      <button @click="deploy('build')" :disabled="deploying"
+              class="hud-btn hud-btn-primary" :class="deploying && 'opacity-50'">
+        <span x-text="deploying ? 'Deploying...' : 'Build & Deploy'"></span>
+      </button>
+      <button @click="deploy('pull')" :disabled="deploying"
+              class="hud-btn hud-btn-secondary" :class="deploying && 'opacity-50'">
+        Pull & Deploy
+      </button>
+      <button @click="deploy('rollback')" :disabled="deploying"
+              class="hud-btn hud-btn-danger" :class="deploying && 'opacity-50'">
+        Rollback
+      </button>
+    </div>
+    <div x-show="deployResult" class="bg-slate-800/60 rounded-lg border border-slate-700/50 p-3">
+      <pre class="text-xs font-mono text-slate-300 whitespace-pre-wrap max-h-48 overflow-y-auto" x-text="deployResult"></pre>
+    </div>
+  </div>
+
+  <div x-show="actionResult" class="mt-4 hud-panel rounded-xl p-4">
     <div class="text-sm font-mono text-slate-300 whitespace-pre-wrap" x-text="actionResult"></div>
   </div>
 </div>
@@ -96,17 +308,24 @@ function settingsApp() {
     containers: [],
     envVars: {},
     actionResult: '',
+    systemHealth: {},
+    deploying: false,
+    deployResult: '',
     launches: [
       { file: 'oai_realtime.launch.py', description: 'OpenAI Realtime - Voice-only conversation' },
       { file: 'oai_dual_agent.launch.py', description: 'OpenAI Dual Agent - Voice + command extraction' },
       { file: 'gemini_live.launch.py', description: 'Gemini Live - Voice with optional video' },
       { file: 'gemini_dual_agent.launch.py', description: 'Gemini Dual Agent - Full multimodal' },
       { file: 'gemini_vision.launch.py', description: 'Gemini Vision - Vision-focused queries' },
+      { file: 'gemini_single.launch.py', description: 'Gemini Single Agent - Single-agent mode' },
       { file: 'byc.launch.py', description: 'Basic - Audio pipeline only (testing)' },
+      { file: 'hardware.launch.py', description: 'Hardware - URDF + DDSM motors + ST3215 servos' },
+      { file: 'camera.launch.py', description: 'Camera - RealSense driver (simulate:=true for dev)' },
+      { file: 'navigation.launch.py', description: 'Navigation - Hardware + Camera + SLAM + Nav2' },
     ],
 
     async init() {
-      await this.fetchContainers();
+      await Promise.all([this.fetchContainers(), this.fetchHealth()]);
       this.envVars = {
         'ROS_DOMAIN_ID': '{{ ros_domain_id }}',
         'RMW_IMPLEMENTATION': 'rmw_cyclonedds_cpp',
@@ -114,6 +333,8 @@ function settingsApp() {
         'OPENAI_API_KEY': '***masked***',
         'GOOGLE_API_KEY': '***masked***',
       };
+      // Refresh health every 15s
+      setInterval(() => this.fetchHealth(), 15000);
     },
 
     async fetchContainers() {
@@ -122,6 +343,13 @@ function settingsApp() {
         const data = await r.json();
         this.containers = data.containers || [];
       } catch(e) { this.containers = []; }
+    },
+
+    async fetchHealth() {
+      try {
+        const r = await fetch('/api/system/health/');
+        this.systemHealth = await r.json();
+      } catch(e) { this.systemHealth = { overall: 'unknown' }; }
     },
 
     async restartContainer(name) {
@@ -138,7 +366,38 @@ function settingsApp() {
       } catch(e) {
         this.actionResult = `Error: ${e.message}`;
       }
-    }
+    },
+
+    async deploy(mode) {
+      this.deploying = true;
+      this.deployResult = `Starting ${mode} deployment...`;
+      try {
+        // Use the ROS exec endpoint to trigger deploy on the host
+        // In production, this would be a dedicated deploy endpoint
+        const r = await fetch('/api/ros2/exec/', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({ command: `echo "Deploy mode: ${mode} - Use scripts/deploy.sh --${mode} on the host"` })
+        });
+        const data = await r.json();
+        this.deployResult = data.output || 'Deploy triggered. Check host for progress.\n\nRun on host:\n  ./scripts/deploy.sh' + (mode !== 'build' ? ` --${mode}` : '');
+      } catch(e) {
+        this.deployResult = `Error: ${e.message}`;
+      }
+      this.deploying = false;
+    },
+
+    formatUptime(seconds) {
+      if (!seconds) return '0s';
+      const d = Math.floor(seconds / 86400);
+      const h = Math.floor((seconds % 86400) / 3600);
+      const m = Math.floor((seconds % 3600) / 60);
+      const s = Math.floor(seconds % 60);
+      if (d > 0) return `${d}d ${h}h ${m}m`;
+      if (h > 0) return `${h}h ${m}m ${s}s`;
+      if (m > 0) return `${m}m ${s}s`;
+      return `${s}s`;
+    },
   }
 }
 </script>

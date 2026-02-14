@@ -15,7 +15,22 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     ros-humble-launch-ros \
     ros-humble-launch-xml \
     ros-humble-rmw-cyclonedds-cpp \
+    ros-humble-robot-state-publisher \
+    ros-humble-tf2-ros \
+    ros-humble-joint-state-publisher \
     ros-humble-diagnostic-updater \
+    ros-humble-nav2-bringup \
+    ros-humble-nav2-bt-navigator \
+    ros-humble-nav2-controller \
+    ros-humble-nav2-planner \
+    ros-humble-nav2-lifecycle-manager \
+    ros-humble-nav2-costmap-2d \
+    ros-humble-nav2-navfn-planner \
+    ros-humble-dwb-core \
+    ros-humble-dwb-plugins \
+    ros-humble-dwb-critics \
+    ros-humble-slam-toolbox \
+    ros-humble-depthimage-to-laserscan \
     libboost-all-dev \
     libgstreamer1.0-dev \
     libgstreamer-plugins-base1.0-dev \
