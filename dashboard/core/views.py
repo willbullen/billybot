@@ -622,6 +622,41 @@ def api_camera_snapshot(request):
     return JsonResponse({"image": None, "error": "No camera frame available"})
 
 
+@csrf_exempt
+@require_POST
+def api_camera_scan(request):
+    """Trigger a camera device scan via the /camera/scan ROS 2 service."""
+    output = _ros2_exec(
+        "ros2 service call /camera/scan std_srvs/srv/Trigger 2>&1",
+        timeout=15,
+    )
+    # Parse the service response
+    success = "success=True" in output or "success=true" in output
+    return JsonResponse({
+        "success": success,
+        "output": output,
+    })
+
+
+@require_GET
+def api_camera_status(request):
+    """Get camera connection status from /camera/status topic."""
+    output = _ros2_exec(
+        "ros2 topic echo /camera/status std_msgs/msg/String --once --max-wait 3 2>&1",
+        timeout=8,
+    )
+    # Try to parse the JSON from the topic message
+    import re
+    match = re.search(r'data:\s*["\'](.+?)["\']', output, re.DOTALL)
+    if match:
+        try:
+            status = json.loads(match.group(1).replace("\\n", "").replace('\\"', '"'))
+            return JsonResponse({"status": status})
+        except json.JSONDecodeError:
+            pass
+    return JsonResponse({"status": {"connected": False, "simulate": True, "error": "No status available"}})
+
+
 # ---------------------------------------------------------------------------
 # API views: Health & Observability
 # ---------------------------------------------------------------------------

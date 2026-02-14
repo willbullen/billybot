@@ -261,6 +261,12 @@
       <div class="mb-4">
         <div class="text-[10px] font-semibold text-slate-500 uppercase tracking-wider mb-2">Diagnostics</div>
         <div class="flex flex-wrap gap-2">
+          <button @click="runAction('camera_scan', 'Scanning for RealSense camera...')" class="hud-btn hud-btn-primary text-xs py-1.5">
+            <span class="flex items-center gap-1.5">
+              <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
+              Scan Camera
+            </span>
+          </button>
           <button @click="runAction('camera_check', 'Checking camera...')" class="hud-btn hud-btn-primary text-xs py-1.5">
             <span class="flex items-center gap-1.5">
               <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"/></svg>
@@ -545,6 +551,22 @@ function dashboardApp() {
             r = await fetch('/api/ros2/topics/');
             data = await r.json();
             this.actionResult = (data.topics || []).map(t => t.name || t).join('\n') || 'No topics found';
+            break;
+
+          case 'camera_scan':
+            r = await fetch('/api/camera/scan/', {
+              method: 'POST',
+              headers: {'Content-Type': 'application/json'},
+              body: '{}'
+            });
+            data = await r.json();
+            this.actionResult = data.output || JSON.stringify(data);
+            this.log(
+              data.success ? 'Camera found and connected' : 'No camera detected',
+              data.success ? 'ok' : 'warn'
+            );
+            // Refresh nav status to update camera indicator
+            setTimeout(() => this.fetchNavStatus(), 2000);
             break;
 
           case 'camera_check':

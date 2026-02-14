@@ -46,6 +46,8 @@ urlpatterns = [
     path("api/map/load/", views.api_map_load, name="api_map_load"),
     path("api/map/list/", views.api_map_list, name="api_map_list"),
     path("api/camera/snapshot/", views.api_camera_snapshot, name="api_camera_snapshot"),
+    path("api/camera/scan/", views.api_camera_scan, name="api_camera_scan"),
+    path("api/camera/status/", views.api_camera_status, name="api_camera_status"),
     # Health & Observability
     path("api/health/", views.api_health, name="api_health"),
     path("api/system/health/", views.api_system_health, name="api_system_health"),

@@ -4,16 +4,24 @@
 Supports Intel RealSense D435i with automatic simulation fallback.
 Publishes color images, depth images, compressed color (MJPEG), and camera info.
 
+Features:
+  - Device discovery: scans USB for connected RealSense cameras
+  - Hot-plug retry: periodically rescans if no camera found
+  - /camera/scan service: trigger manual device scan from dashboard/CLI
+  - /camera/status topic: publishes camera connection state
+
 Usage:
   ros2 run by_your_command camera_driver_node
   ros2 run by_your_command camera_driver_node --ros-args -p simulate:=true
 """
 
+import json
 import numpy as np
 import rclpy
 from rclpy.node import Node
 from sensor_msgs.msg import Image, CompressedImage, CameraInfo
-from std_msgs.msg import Header
+from std_msgs.msg import Header, String
+from std_srvs.srv import Trigger
 import time
 
 # Optional imports - graceful fallback
@@ -46,6 +54,7 @@ class CameraDriverNode(Node):
         self.declare_parameter("publish_rate", 15.0)
         self.declare_parameter("camera_frame_id", "camera_link")
         self.declare_parameter("depth_frame_id", "camera_depth_frame")
+        self.declare_parameter("scan_interval", 10.0)  # seconds between auto-scans
 
         self.simulate = self.get_parameter("simulate").value
         self.width = self.get_parameter("width").value
@@ -56,6 +65,7 @@ class CameraDriverNode(Node):
         self.publish_rate = self.get_parameter("publish_rate").value
         self.camera_frame_id = self.get_parameter("camera_frame_id").value
         self.depth_frame_id = self.get_parameter("depth_frame_id").value
+        self.scan_interval = self.get_parameter("scan_interval").value
 
         # Publishers
         self.color_pub = self.create_publisher(Image, "/camera/color/image_raw", 10)
@@ -63,6 +73,7 @@ class CameraDriverNode(Node):
             CompressedImage, "/camera/color/compressed", 10
         )
         self.info_pub = self.create_publisher(CameraInfo, "/camera/camera_info", 10)
+        self.status_pub = self.create_publisher(String, "/camera/status", 10)
 
         if self.enable_depth:
             self.depth_pub = self.create_publisher(
@@ -71,41 +82,167 @@ class CameraDriverNode(Node):
         else:
             self.depth_pub = None
 
-        # Initialize camera or simulation
+        # Scan service -- call with: ros2 service call /camera/scan std_srvs/srv/Trigger
+        self.scan_srv = self.create_service(Trigger, "/camera/scan", self._scan_callback)
+
+        # Camera state
         self.pipeline = None
         self.sim_frame_count = 0
+        self._camera_connected = False
+        self._device_info = {}
+        self._consecutive_failures = 0
+        self._max_failures = 30  # switch to sim after this many frame failures
 
-        if not self.simulate and HAS_REALSENSE:
-            try:
-                self._init_realsense()
-                self.get_logger().info(
-                    f"RealSense camera initialized ({self.width}x{self.height} @ {self.fps}fps)"
-                )
-            except Exception as e:
-                self.get_logger().warn(
-                    f"RealSense init failed ({e}), falling back to simulation"
-                )
-                self.simulate = True
-        elif not self.simulate:
-            self.get_logger().warn(
-                "pyrealsense2 not installed, falling back to simulation"
-            )
-            self.simulate = True
+        # Initial device scan
+        if not self.simulate:
+            self._scan_and_connect()
 
         if self.simulate:
             self.get_logger().info(
                 f"Camera running in SIMULATION mode ({self.width}x{self.height})"
             )
 
-        # Timer for publishing
+        # Timer for publishing frames
         period = 1.0 / self.publish_rate
         self.timer = self.create_timer(period, self._publish_frames)
         self.get_logger().info(f"Publishing at {self.publish_rate} Hz")
 
-    def _init_realsense(self):
-        """Initialize Intel RealSense pipeline."""
+        # Timer for auto-rescan when disconnected (only if not forced simulate)
+        if not self.get_parameter("simulate").value:
+            self.scan_timer = self.create_timer(self.scan_interval, self._auto_scan)
+
+        # Publish initial status
+        self._publish_status()
+
+    # ------------------------------------------------------------------
+    # Device discovery
+    # ------------------------------------------------------------------
+
+    def _discover_devices(self):
+        """Scan USB for connected RealSense devices. Returns list of device info dicts."""
+        if not HAS_REALSENSE:
+            return []
+
+        devices = []
+        try:
+            ctx = rs.context()
+            for dev in ctx.query_devices():
+                info = {
+                    "name": dev.get_info(rs.camera_info.name) if dev.supports(rs.camera_info.name) else "Unknown",
+                    "serial": dev.get_info(rs.camera_info.serial_number) if dev.supports(rs.camera_info.serial_number) else "",
+                    "firmware": dev.get_info(rs.camera_info.firmware_version) if dev.supports(rs.camera_info.firmware_version) else "",
+                    "usb_type": dev.get_info(rs.camera_info.usb_type_descriptor) if dev.supports(rs.camera_info.usb_type_descriptor) else "",
+                    "product_id": dev.get_info(rs.camera_info.product_id) if dev.supports(rs.camera_info.product_id) else "",
+                }
+                devices.append(info)
+                self.get_logger().info(
+                    f"Found RealSense: {info['name']} (S/N: {info['serial']}, "
+                    f"FW: {info['firmware']}, USB: {info['usb_type']})"
+                )
+        except Exception as e:
+            self.get_logger().warn(f"Device discovery error: {e}")
+
+        if not devices:
+            self.get_logger().info("No RealSense devices found on USB bus")
+
+        return devices
+
+    def _scan_and_connect(self):
+        """Discover devices and connect to the first available one."""
+        if self._camera_connected and self.pipeline:
+            self.get_logger().info("Camera already connected, skipping scan")
+            return True
+
+        devices = self._discover_devices()
+        if not devices:
+            if not self.simulate:
+                self.get_logger().warn(
+                    "No RealSense detected -- running in simulation mode until camera found"
+                )
+                self.simulate = True
+            return False
+
+        # Try to connect to the first device
+        self._device_info = devices[0]
+        try:
+            self._init_realsense(serial=devices[0].get("serial"))
+            self._camera_connected = True
+            self.simulate = False
+            self._consecutive_failures = 0
+            self.get_logger().info(
+                f"RealSense connected: {devices[0]['name']} "
+                f"({self.width}x{self.height} @ {self.fps}fps)"
+            )
+            self._publish_status()
+            return True
+        except Exception as e:
+            self.get_logger().error(f"Failed to start RealSense pipeline: {e}")
+            self.simulate = True
+            self._publish_status()
+            return False
+
+    def _auto_scan(self):
+        """Periodically try to reconnect if camera is not connected."""
+        if self._camera_connected:
+            return
+        self.get_logger().debug("Auto-scanning for RealSense camera...")
+        self._scan_and_connect()
+
+    def _scan_callback(self, request, response):
+        """ROS 2 service callback: /camera/scan -- trigger manual device scan."""
+        self.get_logger().info("Manual camera scan triggered")
+
+        # If already connected, disconnect first to allow reconnection
+        if self._camera_connected:
+            self._disconnect()
+
+        devices = self._discover_devices()
+        if not devices:
+            response.success = False
+            response.message = (
+                "No RealSense devices found. Check USB connection. "
+                "Ensure /dev/bus/usb is mapped in docker-compose.yml."
+            )
+            self._publish_status()
+            return response
+
+        if self._scan_and_connect():
+            response.success = True
+            info = self._device_info
+            response.message = (
+                f"Connected to {info.get('name', 'RealSense')} "
+                f"(S/N: {info.get('serial', '?')}, USB: {info.get('usb_type', '?')})"
+            )
+        else:
+            response.success = False
+            response.message = "Device found but failed to start pipeline"
+
+        return response
+
+    def _disconnect(self):
+        """Stop the current pipeline and mark as disconnected."""
+        if self.pipeline is not None:
+            try:
+                self.pipeline.stop()
+            except Exception:
+                pass
+            self.pipeline = None
+        self._camera_connected = False
+        self.simulate = True
+        self._publish_status()
+
+    # ------------------------------------------------------------------
+    # RealSense initialization
+    # ------------------------------------------------------------------
+
+    def _init_realsense(self, serial=None):
+        """Initialize Intel RealSense pipeline, optionally targeting a specific serial."""
         self.pipeline = rs.pipeline()
         config = rs.config()
+
+        if serial:
+            config.enable_device(serial)
+
         config.enable_stream(
             rs.stream.color, self.width, self.height, rs.format.bgr8, self.fps
         )
@@ -120,6 +257,30 @@ class CameraDriverNode(Node):
         intrinsics = color_profile.as_video_stream_profile().get_intrinsics()
         self._intrinsics = intrinsics
 
+    # ------------------------------------------------------------------
+    # Status publishing
+    # ------------------------------------------------------------------
+
+    def _publish_status(self):
+        """Publish camera status to /camera/status as JSON."""
+        status = {
+            "connected": self._camera_connected,
+            "simulate": self.simulate,
+            "resolution": f"{self.width}x{self.height}",
+            "fps": self.fps,
+            "publish_rate": self.publish_rate,
+            "depth_enabled": self.enable_depth,
+            "device": self._device_info if self._camera_connected else {},
+            "realsense_sdk": HAS_REALSENSE,
+        }
+        msg = String()
+        msg.data = json.dumps(status)
+        self.status_pub.publish(msg)
+
+    # ------------------------------------------------------------------
+    # Frame publishing
+    # ------------------------------------------------------------------
+
     def _publish_frames(self):
         """Capture and publish camera frames."""
         stamp = self.get_clock().now().to_msg()
@@ -132,7 +293,16 @@ class CameraDriverNode(Node):
         else:
             color_data, depth_data = self._capture_realsense()
             if color_data is None:
+                self._consecutive_failures += 1
+                if self._consecutive_failures >= self._max_failures:
+                    self.get_logger().error(
+                        f"Camera lost after {self._max_failures} consecutive failures, "
+                        "switching to simulation. Call /camera/scan to reconnect."
+                    )
+                    self._disconnect()
                 return
+
+            self._consecutive_failures = 0
 
         # Publish raw color image
         color_msg = Image()
@@ -220,14 +390,25 @@ class CameraDriverNode(Node):
             cv2.circle(frame, (cx, cy), 15, (0, 200, 210), 1)
 
             # HUD overlay text
+            mode_text = "SIM MODE" if not self._camera_connected else "LIVE"
+            mode_color = (0, 140, 150) if not self._camera_connected else (0, 200, 100)
             cv2.putText(
                 frame, "BILLYBOT CAM", (10, 25),
                 cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 180, 190), 1,
             )
             cv2.putText(
-                frame, f"SIM MODE", (10, 45),
-                cv2.FONT_HERSHEY_SIMPLEX, 0.4, (0, 140, 150), 1,
+                frame, mode_text, (10, 45),
+                cv2.FONT_HERSHEY_SIMPLEX, 0.4, mode_color, 1,
             )
+
+            # Scanning indicator when looking for camera
+            if not self._camera_connected:
+                scan_text = "SCANNING FOR CAMERA..."
+                cv2.putText(
+                    frame, scan_text, (10, 70),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.35, (0, 100, 180), 1,
+                )
+
             cv2.putText(
                 frame, f"FRAME {self.sim_frame_count}", (10, self.height - 15),
                 cv2.FONT_HERSHEY_SIMPLEX, 0.35, (0, 120, 130), 1,
