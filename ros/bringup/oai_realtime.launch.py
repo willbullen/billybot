@@ -14,8 +14,9 @@ Date: July 2025
 
 import os
 from launch import LaunchDescription
-from launch.actions import DeclareLaunchArgument, ExecuteProcess, LogInfo, GroupAction
+from launch.actions import DeclareLaunchArgument, ExecuteProcess, LogInfo, GroupAction, IncludeLaunchDescription
 from launch.conditions import IfCondition
+from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import LaunchConfiguration, EnvironmentVariable, PythonExpression
 from launch_ros.actions import Node, PushRosNamespace
 from ament_index_python.packages import get_package_share_directory, get_package_prefix
@@ -83,6 +84,12 @@ def generate_launch_description():
         default_value='false',
         description='Save raw microphone input (post echo suppression) for debugging'
     )
+
+    enable_camera_arg = DeclareLaunchArgument(
+        'enable_camera',
+        default_value='true',
+        description='Enable camera driver (RealSense with simulation fallback)'
+    )
     
     
     # Audio capture node
@@ -136,6 +143,14 @@ def generate_launch_description():
         remappings=[
             ('audio', 'audio')  # Listen to raw audio directly (no AEC needed)
         ]
+    )
+    
+    # Camera driver (RealSense D435i; falls back to simulation if no hardware)
+    camera_launch = IncludeLaunchDescription(
+        PythonLaunchDescriptionSource(
+            os.path.join(pkg_dir, 'bringup', 'camera.launch.py')
+        ),
+        condition=IfCondition(LaunchConfiguration('enable_camera'))
     )
     
     # ROS AI Bridge for data transport with WebSocket enabled
@@ -246,11 +261,13 @@ def generate_launch_description():
         verbose_arg,
         enable_voice_recorder_arg,
         save_mic_arg,
+        enable_camera_arg,
         
         # Startup message
         startup_message,
         
         # Nodes and agent
+        camera_launch,
         nodes_group,
         agent_group
     ])

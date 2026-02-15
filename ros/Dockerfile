@@ -1,9 +1,73 @@
-# ByYourCommand ROS 2 Container
+# =====================================================================
+# Stage 1: Build librealsense2 from source (no pip/apt for aarch64)
+# First build takes ~20-40 min on Jetson; cached after that.
+# Only rebuilds when LIBRS_VERSION changes.
+# Releases: github.com/IntelRealSense/librealsense/tags
+# =====================================================================
+FROM ros:humble-ros-base AS librealsense-builder
+
+ARG DEBIAN_FRONTEND=noninteractive
+ARG LIBRS_VERSION=2.55.1
+
+# Builder dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
+    cmake \
+    libssl-dev \
+    libusb-1.0-0-dev \
+    pkg-config \
+    python3 \
+    python3-dev \
+    curl \
+    ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+# Download librealsense source
+WORKDIR /usr/src
+RUN curl -L https://codeload.github.com/IntelRealSense/librealsense/tar.gz/refs/tags/v${LIBRS_VERSION} -o librealsense.tar.gz \
+    && tar -zxf librealsense.tar.gz \
+    && rm librealsense.tar.gz \
+    && ln -s /usr/src/librealsense-${LIBRS_VERSION} /usr/src/librealsense
+
+# Build with Python bindings + RSUSB backend (no kernel module needed in Docker)
+RUN cd /usr/src/librealsense \
+    && mkdir build && cd build \
+    && cmake \
+        -DCMAKE_C_FLAGS_RELEASE="${CMAKE_C_FLAGS_RELEASE} -s" \
+        -DCMAKE_CXX_FLAGS_RELEASE="${CMAKE_CXX_FLAGS_RELEASE} -s" \
+        -DCMAKE_INSTALL_PREFIX=/opt/librealsense \
+        -DBUILD_GRAPHICAL_EXAMPLES=OFF \
+        -DBUILD_EXAMPLES=OFF \
+        -DBUILD_PYTHON_BINDINGS:bool=true \
+        -DPYTHON_EXECUTABLE=/usr/bin/python3 \
+        -DFORCE_RSUSB_BACKEND=ON \
+        -DCMAKE_BUILD_TYPE=Release \
+        ../ \
+    && make -j$(nproc) all \
+    && make install
+
+# Stage pyrealsense2 Python bindings to a known path for multi-stage COPY
+# (cmake may place them under /opt/librealsense/lib/pythonX.Y/... or /usr/lib/...)
+RUN PYRS_DIR=$(find /opt/librealsense /usr/lib /usr/local -name "pyrealsense2" -type d 2>/dev/null | head -1) && \
+    if [ -n "$PYRS_DIR" ]; then cp -r "$PYRS_DIR" /opt/pyrealsense2; \
+    else echo "ERROR: pyrealsense2 Python bindings not found after build" && exit 1; fi
+
+# =====================================================================
+# Stage 2: ByYourCommand ROS 2 Container
 # Base: ROS 2 Humble on Ubuntu 22.04
-# For Jetson deployment, replace with: dustynv/ros:humble-desktop-l4t-r36.4.0
+# =====================================================================
 FROM ros:humble-ros-base
 
 ARG DEBIAN_FRONTEND=noninteractive
+
+# Copy librealsense2 from builder (shared libs, headers, tools)
+COPY --from=librealsense-builder /opt/librealsense /usr/local/
+# Copy pyrealsense2 Python bindings to system dist-packages
+COPY --from=librealsense-builder /opt/pyrealsense2 /usr/lib/python3/dist-packages/pyrealsense2
+# Copy udev rules for RealSense device permissions
+COPY --from=librealsense-builder /usr/src/librealsense/config/99-realsense-libusb.rules /etc/udev/rules.d/
+# Register shared libraries with the dynamic linker
+RUN ldconfig
 
 # Install system dependencies (audio_common* not in Humble apt; built from source below)
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -45,6 +109,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libasound2-plugins \
     alsa-utils \
     pulseaudio-utils \
+    libusb-1.0-0 \
     && rm -rf /var/lib/apt/lists/*
 
 # Route ALSA through PulseAudio so all audio apps (PyAudio, GStreamer)
